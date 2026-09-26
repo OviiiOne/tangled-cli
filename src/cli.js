@@ -1,39 +1,62 @@
+import { readFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';
+import { reportUnreachable } from './backlinks.js';
 import { TglError } from './errors.js';
+import { t } from './i18n.js';
 import auth from './commands/auth.js';
+import issue from './commands/issue.js';
 import pr from './commands/pr.js';
+import release from './commands/release.js';
+import repo from './commands/repo.js';
 
 // Each topic is a self-contained module: { name, summary, commands }.
-// Adding a topic (release, issue, ...) means adding one file and one line here.
-const TOPICS = [auth, pr];
+// Adding a topic means adding one file and one line here.
+const TOPICS = [auth, repo, pr, issue, release];
+
+const VERSION = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
 
 function topicHelp(topic) {
-  const lines = [`Uso: tgl ${topic.name} <comando> [opciones]`, '', topic.summary, '', 'Comandos:'];
+  const lines = [t(`Usage: tgl ${topic.name} <command> [options]`, `Uso: tgl ${topic.name} <comando> [opciones]`), '', topic.summary, '', t('Commands:', 'Comandos:')];
   for (const [name, cmd] of Object.entries(topic.commands)) {
     lines.push(`  ${name.padEnd(10)} ${cmd.summary}`);
   }
-  lines.push('', `Ayuda de un comando: tgl ${topic.name} <comando> --help`);
+  lines.push('', t(`Help for a command: tgl ${topic.name} <command> --help`, `Ayuda de un comando: tgl ${topic.name} <comando> --help`));
   return lines.join('\n');
 }
 
 function mainHelp() {
-  const lines = ['tgl: maneja Tangled (tangled.org) desde la terminal.', '', 'Uso: tgl <tema> <comando> [opciones]', '', 'Temas:'];
-  for (const t of TOPICS) lines.push(`  ${t.name.padEnd(10)} ${t.summary}`);
-  lines.push('', 'Ayuda de un tema: tgl <tema> --help');
+  const lines = [
+    t('tgl: work with Tangled (tangled.org) from the terminal.', 'tgl: maneja Tangled (tangled.org) desde la terminal.'),
+    '',
+    t('Usage: tgl <topic> <command> [options]', 'Uso: tgl <tema> <comando> [opciones]'),
+    '',
+    t('Topics:', 'Temas:'),
+  ];
+  for (const topic of TOPICS) lines.push(`  ${topic.name.padEnd(10)} ${topic.summary}`);
+  lines.push(
+    '',
+    t('Help for a topic: tgl <topic> --help', 'Ayuda de un tema: tgl <tema> --help'),
+    t('Version: tgl --version', 'Versión: tgl --version'),
+  );
   return lines.join('\n');
 }
 
 export async function main(argv) {
   const [topicName, commandName, ...rest] = argv;
 
+  if (topicName === '--version' || topicName === '-v') {
+    console.log(`tgl ${VERSION}`);
+    return 0;
+  }
+
   if (!topicName || topicName === '--help' || topicName === '-h' || topicName === 'help') {
     console.log(mainHelp());
     return 0;
   }
 
-  const topic = TOPICS.find((t) => t.name === topicName);
+  const topic = TOPICS.find((x) => x.name === topicName);
   if (!topic) {
-    console.error(`Tema desconocido: "${topicName}".\n\n${mainHelp()}`);
+    console.error(`${t(`Unknown topic: "${topicName}".`, `Tema desconocido: "${topicName}".`)}\n\n${mainHelp()}`);
     return 1;
   }
 
@@ -44,7 +67,7 @@ export async function main(argv) {
 
   const command = topic.commands[commandName];
   if (!command) {
-    console.error(`Comando desconocido: "tgl ${topicName} ${commandName}".\n\n${topicHelp(topic)}`);
+    console.error(`${t(`Unknown command: "tgl ${topicName} ${commandName}".`, `Comando desconocido: "tgl ${topicName} ${commandName}".`)}\n\n${topicHelp(topic)}`);
     return 1;
   }
 
@@ -61,6 +84,7 @@ export async function main(argv) {
       strict: true,
     });
     await command.run(values, positionals);
+    reportUnreachable();
     return 0;
   } catch (err) {
     if (err instanceof TglError) {
