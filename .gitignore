@@ -1,0 +1,6 @@
+node_modules/
+# Credentials live in the user profile (%APPDATA%\tgl), never here.
+# These patterns are a safety net in case one is copied in by mistake.
+*.secret
+credentials*.json
+.env
