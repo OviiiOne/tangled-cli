@@ -7,8 +7,7 @@ Session state lives in `.claude/state.md` (local only, gitignored).
 - Typical workflow: a repo mirrored on GitHub and Tangled, where each finished branch gets
   a PR on both. Merging happens locally and reaches both forges in one push, so `tgl` only
   creates, lists and closes (or marks as merged) PRs. It never merges.
-- Next candidates, in order: `tgl release` (attach build artifacts to a tag, i.e. the
-  `sh.tangled.repo.artifact` record), then `tgl issue`.
+- Topics: `auth`, `pr`, `issue`, `release` (files attached to an annotated tag).
 
 ## Design
 - Node.js ≥ 20 with NO dependencies (built-in fetch, zlib, child_process, node:test).
@@ -18,6 +17,11 @@ Session state lives in `.claude/state.md` (local only, gitignored).
 - `src/tangled.js` holds every Tangled record format. They are undocumented and may
   change: before touching them, re-read the lexicons and `appview/pulls/create.go` in
   https://tangled.org/tangled.org/core.
+- Other accounts' records (PRs, issues, comments, states) are found through the public
+  Constellation backlink index (`src/backlinks.js`), with the user's own records as a
+  fallback. Old record formats point at the repo by a repo-record at-uri or other field
+  names (`src/repoData.js`). Check listing changes against the web counts of a big repo
+  such as `tangled.org/core`.
 - Auth = app password, DPAPI-encrypted in `%APPDATA%\tgl\login.json`. The user types it
   in their own terminal (`tgl auth login`). Never read it, print it or ask for it.
 - Never use or depend on the third-party CLIs `tg` / `tang`. Reading them as a reference
