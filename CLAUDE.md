@@ -1,15 +1,13 @@
 # tangled-cli (`tgl`)
 
-Our own command-line tool for Tangled (tangled.org), in the style of `gh`. The general
-working rules are in the global `~/.claude/CLAUDE.md`; this file only covers this project.
+A command-line tool for Tangled (tangled.org), in the style of `gh`.
 Session state lives in `.claude/state.md` (local only, gitignored).
 
-## Purpose
-- Main use: close each finished NewsPal branch with a PR on Tangled as well as on GitHub
-  (NewsPal: `C:\Users\ovied\intruth-factcheck`, Tangled repo `oviiione.eu/newspal`).
-- Merging happens locally and reaches GitHub and Tangled in one push. `tgl` only creates,
-  lists and closes (or marks as merged) PRs. It never merges.
-- Next candidates, in order: `tgl release` (attach the signed .xpi to a tag, i.e. the
+## Scope
+- Typical workflow: a repo mirrored on GitHub and Tangled, where each finished branch gets
+  a PR on both. Merging happens locally and reaches both forges in one push, so `tgl` only
+  creates, lists and closes (or marks as merged) PRs. It never merges.
+- Next candidates, in order: `tgl release` (attach build artifacts to a tag, i.e. the
   `sh.tangled.repo.artifact` record), then `tgl issue`.
 
 ## Design
@@ -28,4 +26,5 @@ Session state lives in `.claude/state.md` (local only, gitignored).
 ## Testing
 - `npm test`: unit tests of the pure parts.
 - `tgl pr create --dry-run`: shows the record without writing anything.
-- Real writes go only to a throwaway test repo, never NewsPal, until the user approves.
+- Real writes (records on Tangled) only with the user's approval, in this project's own
+  repo or a throwaway one.
