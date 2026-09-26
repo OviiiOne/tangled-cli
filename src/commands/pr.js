@@ -3,7 +3,7 @@ import { gzipSync } from 'node:zlib';
 import { listAllRecords } from '../atproto.js';
 import { readLoginInfo } from '../credentials.js';
 import { TglError } from '../errors.js';
-import { currentBranch, formatPatch } from '../git.js';
+import { branchName, currentBranch, formatPatch } from '../git.js';
 import { buildPullRecord, buildStatusRecord, NSID, pullStates, repoWebUrl, resolveRepo } from '../tangled.js';
 import { openSession } from './auth.js';
 
@@ -71,16 +71,20 @@ export default {
         if (!opts.title?.trim()) throw new TglError('Falta el título: --title "..."');
         const body = opts['body-file'] ? readFileSync(opts['body-file'], 'utf8') : opts.body;
         const head = opts.head ?? currentBranch();
-        if (head === opts.base) throw new TglError(`La rama de cambios y la de destino son la misma ("${head}").`);
+        // The patch uses the refs as given; the record stores plain branch names.
+        const base = branchName(opts.base);
+        const headBranch = branchName(head);
+        if (headBranch === base) throw new TglError(`La rama de cambios y la de destino son la misma ("${base}").`);
         const { repoDid, label } = await resolveRepo(opts.repo);
         const { patch, commits } = formatPatch(opts.base, head);
         const gz = gzipSync(Buffer.from(patch, 'utf8'));
 
         console.log(`Repositorio: ${label}`);
-        console.log(`PR: ${head} -> ${opts.base} (${commits} commit${commits === 1 ? '' : 's'}, parche de ${gz.length} bytes comprimido)`);
+        console.log(`PR: ${headBranch} -> ${base} (${commits} commit${commits === 1 ? '' : 's'}, parche de ${gz.length} bytes comprimido)`);
 
+        const fields = { repoDid, title: opts.title, body, base, head: headBranch };
         if (opts['dry-run']) {
-          const preview = buildPullRecord({ repoDid, title: opts.title, body, base: opts.base, head, patchBlob: '<parche comprimido>' });
+          const preview = buildPullRecord({ ...fields, patchBlob: '<parche comprimido>' });
           console.log('\nSe crearía este registro (no se ha creado nada):');
           console.log(JSON.stringify(preview, null, 2));
           return;
@@ -88,7 +92,7 @@ export default {
 
         const session = await openSession();
         const patchBlob = await session.uploadBlob(gz, 'application/gzip');
-        const record = buildPullRecord({ repoDid, title: opts.title, body, base: opts.base, head, patchBlob });
+        const record = buildPullRecord({ ...fields, patchBlob });
         const { uri } = await session.createRecord(NSID.pull, record);
         console.log(`\nPR creada. Id: ${uri.split('/').pop()}`);
         console.log(`Dirección: ${uri}`);
