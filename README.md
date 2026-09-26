@@ -32,28 +32,28 @@ only your user can read, and tells you so. `tgl auth logout` deletes it.
 
 ### Commands
 
-```text
-tgl repo view
-tgl repo set-default-branch <branch>
-
-tgl pr create -t "Title" -b "Description"   # current branch -> repo's default branch
-tgl pr list [--state open|closed|merged|all] [--limit N] [--json]
-tgl pr view <id|branch> [--patch] [--json]
-tgl pr checkout <id|branch> [--branch name]
-tgl pr comment <id|branch> -b "..."
-tgl pr close <id|branch> [--merged]
-tgl pr reopen <id>
-
-tgl issue create -t "Title" -b "Description"
-tgl issue list [--state open|closed|all] [--limit N] [--json]
-tgl issue view <id> [--json]
-tgl issue comment <id> -b "..."
-tgl issue close <id> [-b "closing comment"]
-tgl issue reopen <id>
-
-tgl release upload v1.2.0 build.zip [more files...]
-tgl release list [v1.2.0] [--json]
-```
+| Command | What it does |
+|---|---|
+| `tgl auth login` | Save your account and app password |
+| `tgl auth status` | Show which account you are logged in with |
+| `tgl auth logout` | Delete the saved app password from this computer |
+| `tgl repo view` | Show a repo's owner, branches and addresses |
+| `tgl repo set-default-branch <branch>` | Change the repo's default branch |
+| `tgl pr create -t "Title" -b "Text"` | Open a PR from the current branch into the default branch |
+| `tgl pr list [--state …] [--limit N]` | List PRs, newest first (open ones by default) |
+| `tgl pr view <id\|branch> [--patch]` | Show a PR: description, changed files, comments |
+| `tgl pr checkout <id\|branch>` | Bring a PR's changes into a local branch to try them |
+| `tgl pr comment <id\|branch> -b "Text"` | Comment on a PR |
+| `tgl pr close <id\|branch> [--merged]` | Close a PR, or mark it as merged |
+| `tgl pr reopen <id>` | Reopen a closed PR |
+| `tgl issue create -t "Title" -b "Text"` | Open an issue |
+| `tgl issue list [--state …] [--limit N]` | List issues, newest first (open ones by default) |
+| `tgl issue view <id>` | Show an issue with its comments |
+| `tgl issue comment <id> -b "Text"` | Comment on an issue |
+| `tgl issue close <id> [-b "Text"]` | Close an issue, optionally with a comment |
+| `tgl issue reopen <id> [-b "Text"]` | Reopen an issue, optionally with a comment |
+| `tgl release upload <tag> <files…>` | Attach files (e.g. a signed build) to a tag's release |
+| `tgl release list [<tag>]` | Show the files attached to each release |
 
 - The Tangled repo is taken from the git remote (`git@tangled.org:did:plc:...`), or given
   with `-R owner/name` or `-R did:plc:...`.
@@ -138,7 +138,28 @@ en un archivo que solo tu usuario puede leer, y `tgl` te avisa. `tgl auth logout
 
 ### Comandos
 
-Los mismos que en la [lista en inglés](#commands).
+| Comando | Qué hace |
+|---|---|
+| `tgl auth login` | Guardar tu cuenta y la contraseña de aplicación |
+| `tgl auth status` | Ver con qué cuenta estás conectado |
+| `tgl auth logout` | Borrar la contraseña guardada en este ordenador |
+| `tgl repo view` | Ver dueño, ramas y direcciones de un repo |
+| `tgl repo set-default-branch <rama>` | Cambiar la rama principal del repo |
+| `tgl pr create -t "Título" -b "Texto"` | Abrir una PR de la rama actual hacia la rama principal |
+| `tgl pr list [--state …] [--limit N]` | Listar las PRs, de más nueva a más vieja (por defecto, las abiertas) |
+| `tgl pr view <id\|rama> [--patch]` | Ver una PR: descripción, archivos cambiados y comentarios |
+| `tgl pr checkout <id\|rama>` | Traer los cambios de una PR a una rama local para probarlos |
+| `tgl pr comment <id\|rama> -b "Texto"` | Comentar en una PR |
+| `tgl pr close <id\|rama> [--merged]` | Cerrar una PR, o marcarla como fusionada |
+| `tgl pr reopen <id>` | Volver a abrir una PR cerrada |
+| `tgl issue create -t "Título" -b "Texto"` | Abrir una issue |
+| `tgl issue list [--state …] [--limit N]` | Listar las issues, de más nueva a más vieja (por defecto, las abiertas) |
+| `tgl issue view <id>` | Ver una issue con sus comentarios |
+| `tgl issue comment <id> -b "Texto"` | Comentar en una issue |
+| `tgl issue close <id> [-b "Texto"]` | Cerrar una issue, con un comentario opcional |
+| `tgl issue reopen <id> [-b "Texto"]` | Volver a abrir una issue, con un comentario opcional |
+| `tgl release upload <etiqueta> <archivos…>` | Adjuntar archivos (por ejemplo un .xpi firmado) a la versión de una etiqueta |
+| `tgl release list [<etiqueta>]` | Ver los archivos subidos a cada versión |
 
 - El repo de Tangled se deduce del remoto git (`git@tangled.org:did:plc:...`), o se indica
   con `-R cuenta/nombre` o `-R did:plc:...`.
