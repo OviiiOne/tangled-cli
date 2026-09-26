@@ -1,46 +1,28 @@
-import { readFileSync } from 'node:fs';
-import { gzipSync } from 'node:zlib';
-import { listAllRecords } from '../atproto.js';
-import { readLoginInfo } from '../credentials.js';
+import { gunzipSync, gzipSync } from 'node:zlib';
+import { fetchBlob } from '../atproto.js';
+import { whoAmI } from '../credentials.js';
 import { TglError } from '../errors.js';
 import { branchName, currentBranch, formatPatch } from '../git.js';
-import { buildPullRecord, buildStatusRecord, NSID, pullStates, repoWebUrl, resolveRepo } from '../tangled.js';
+import { loadItems, pickById } from '../repoData.js';
+import {
+  buildPullCommentRecord, buildPullRecord, buildStatusRecord, NSID, repoWebUrl, resolveRepo,
+} from '../tangled.js';
 import { openSession } from './auth.js';
+import { bodyOptions, printComments, readBody, repoOption } from './shared.js';
 
-const repoOption = { repo: { type: 'string', short: 'R' } };
-
-function whoAmI() {
-  const info = readLoginInfo();
-  if (!info) throw new TglError('No has iniciado sesión. Ejecuta "tgl auth login" en tu terminal.');
-  return info;
-}
-
-// Reads only this account's own PRs: they are the records it has written.
-async function loadPulls(account, repoDid) {
-  const [pulls, statuses] = await Promise.all([
-    listAllRecords(account.pds, account.did, NSID.pull),
-    listAllRecords(account.pds, account.did, NSID.pullStatus),
-  ]);
-  const stateOf = pullStates(statuses);
-  return pulls
-    .filter((r) => r.value.target?.repo === repoDid)
-    .map((r) => ({ uri: r.uri, rkey: r.uri.split('/').pop(), state: stateOf(r.uri), ...r.value }))
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-}
-
-// Finds a PR by its id (rkey), full at:// address, or source branch name.
+// Finds a PR by its id, full at:// address, or the branch of an open PR.
 function pickPull(pulls, ref) {
-  const byId = pulls.find((p) => p.rkey === ref || p.uri === ref);
-  if (byId) return byId;
-  const byBranch = pulls.filter((p) => p.source?.branch === ref && p.state === 'open');
-  if (byBranch.length === 1) return byBranch[0];
-  if (byBranch.length > 1) throw new TglError(`Hay varias PRs abiertas de la rama "${ref}"; usa su id (tgl pr list).`);
-  throw new TglError(`No encuentro ninguna PR "${ref}" en este repositorio. Mira los ids con "tgl pr list".`);
+  const byBranch = pulls.filter((p) => p.source?.branch === ref && p.state === 'open' && !p.source?.repo);
+  if (!pulls.some((p) => p.rkey === ref || p.uri === ref)) {
+    if (byBranch.length === 1) return byBranch[0];
+    if (byBranch.length > 1) throw new TglError(`Hay varias PRs abiertas de la rama "${ref}"; usa su id (tgl pr list).`);
+  }
+  return pickById(pulls, ref, 'la PR');
 }
 
 export default {
   name: 'pr',
-  summary: 'Crear, listar y cerrar pull requests',
+  summary: 'Crear, ver, comentar y cerrar pull requests',
   commands: {
     create: {
       summary: 'Crear una PR de una rama hacia master',
@@ -61,15 +43,14 @@ export default {
       options: {
         ...repoOption,
         title: { type: 'string', short: 't' },
-        body: { type: 'string', short: 'b' },
-        'body-file': { type: 'string', short: 'F' },
+        ...bodyOptions,
         head: { type: 'string', short: 'H' },
         base: { type: 'string', short: 'B', default: 'master' },
         'dry-run': { type: 'boolean', default: false },
       },
       async run(opts) {
         if (!opts.title?.trim()) throw new TglError('Falta el título: --title "..."');
-        const body = opts['body-file'] ? readFileSync(opts['body-file'], 'utf8') : opts.body;
+        const body = readBody(opts);
         const head = opts.head ?? currentBranch();
         // The patch uses the refs as given; the record stores plain branch names.
         const base = branchName(opts.base);
@@ -100,26 +81,63 @@ export default {
       },
     },
     list: {
-      summary: 'Listar tus PRs de este repositorio',
-      usage: [
-        'Uso: tgl pr list [--state open|closed|merged|all] [-R cuenta/nombre]',
-        '',
-        'Muestra solo las PRs creadas con tu cuenta (las de otras personas se guardan en sus cuentas).',
-      ].join('\n'),
+      summary: 'Listar las PRs de este repositorio',
+      usage: 'Uso: tgl pr list [--state open|closed|merged|all] [-R cuenta/nombre]',
       options: { ...repoOption, state: { type: 'string', short: 's', default: 'open' } },
       async run(opts) {
         const valid = ['open', 'closed', 'merged', 'all'];
         if (!valid.includes(opts.state)) throw new TglError(`--state debe ser uno de: ${valid.join(', ')}`);
         const { repoDid, label } = await resolveRepo(opts.repo);
-        const pulls = (await loadPulls(whoAmI(), repoDid)).filter((p) => opts.state === 'all' || p.state === opts.state);
+        const pulls = (await loadItems('pull', whoAmI(), repoDid)).filter((p) => opts.state === 'all' || p.state === opts.state);
         if (!pulls.length) {
-          console.log(`No hay PRs (${opts.state}) tuyas en ${label}.`);
+          console.log(`No hay PRs (${opts.state}) en ${label}.`);
           return;
         }
         for (const p of pulls) {
-          const branch = `${p.source?.branch ?? '?'} -> ${p.target.branch}`;
-          console.log(`${p.rkey}  ${p.state.padEnd(6)}  ${p.createdAt.slice(0, 10)}  ${branch.padEnd(28)}  ${p.title}`);
+          const from = p.source?.repo ? `(fork) ${p.source.branch}` : p.source?.branch ?? '(parche)';
+          console.log(`${p.rkey}  ${p.state.padEnd(6)}  ${p.createdAt.slice(0, 10)}  ${`${from} -> ${p.target.branch}`.padEnd(28)}  ${p.title}  [${p.authorHandle}]`);
         }
+      },
+    },
+    view: {
+      summary: 'Ver una PR: descripción, archivos cambiados y comentarios',
+      usage: [
+        'Uso: tgl pr view <id | rama> [--patch] [-R cuenta/nombre]',
+        '',
+        '  --patch   Mostrar los cambios completos',
+      ].join('\n'),
+      options: { ...repoOption, patch: { type: 'boolean', default: false } },
+      async run(opts, [ref]) {
+        if (!ref) throw new TglError('Indica qué PR ver: su id (tgl pr list) o el nombre de su rama.');
+        const { repoDid } = await resolveRepo(opts.repo);
+        const account = whoAmI();
+        const pull = pickPull(await loadItems('pull', account, repoDid), ref);
+        // Old PRs kept the patch inline instead of in rounds.
+        const round = pull.rounds?.at(-1);
+        const patch = round ? gunzipSync(await fetchBlob(pull.author, round.patchBlob)).toString('utf8') : pull.patch ?? '';
+        const files = [...new Set([...patch.matchAll(/^diff --git a\/(.+?) b\//gm)].map((m) => m[1]))];
+
+        console.log(`${pull.title}`);
+        console.log(`${pull.state} · ${pull.authorHandle} · ${pull.createdAt.slice(0, 10)} · ${pull.source?.branch ?? '(parche)'} -> ${pull.target.branch} · revisión ${pull.rounds?.length ?? 1}`);
+        if (pull.body) console.log(`\n${pull.body}`);
+        console.log(`\nArchivos cambiados (${files.length}):`);
+        for (const f of files) console.log(`  ${f}`);
+        await printComments(account, pull.uri, NSID.pullComment, '.pull');
+        if (opts.patch) console.log(`\n${patch}`);
+      },
+    },
+    comment: {
+      summary: 'Comentar en una PR',
+      usage: 'Uso: tgl pr comment <id | rama> (--body <texto> | --body-file <archivo>) [-R cuenta/nombre]',
+      options: { ...repoOption, ...bodyOptions },
+      async run(opts, [ref]) {
+        if (!ref) throw new TglError('Indica en qué PR comentar: su id (tgl pr list) o el nombre de su rama.');
+        const body = readBody(opts, { required: true });
+        const { repoDid } = await resolveRepo(opts.repo);
+        const pull = pickPull(await loadItems('pull', whoAmI(), repoDid), ref);
+        const session = await openSession();
+        await session.createRecord(NSID.pullComment, buildPullCommentRecord({ pullUri: pull.uri, body }));
+        console.log(`Comentario publicado en "${pull.title}".`);
       },
     },
     close: {
@@ -135,17 +153,31 @@ export default {
       options: { ...repoOption, merged: { type: 'boolean', default: false } },
       async run(opts, [ref]) {
         if (!ref) throw new TglError('Indica qué PR cerrar: su id (tgl pr list) o el nombre de su rama.');
-        const { repoDid } = await resolveRepo(opts.repo);
-        const pull = pickPull(await loadPulls(whoAmI(), repoDid), ref);
-        const state = opts.merged ? 'merged' : 'closed';
-        if (pull.state === state) {
-          console.log(`La PR "${pull.title}" ya estaba ${state === 'merged' ? 'fusionada' : 'cerrada'}.`);
-          return;
-        }
-        const session = await openSession();
-        await session.createRecord(NSID.pullStatus, buildStatusRecord({ pullUri: pull.uri, state }));
-        console.log(`PR "${pull.title}" marcada como ${state === 'merged' ? 'fusionada' : 'cerrada'}.`);
+        await setPullState(opts, ref, opts.merged ? 'merged' : 'closed');
+      },
+    },
+    reopen: {
+      summary: 'Volver a abrir una PR cerrada',
+      usage: 'Uso: tgl pr reopen <id> [-R cuenta/nombre]',
+      options: repoOption,
+      async run(opts, [ref]) {
+        if (!ref) throw new TglError('Indica qué PR reabrir: su id (tgl pr list --state all).');
+        await setPullState(opts, ref, 'open');
       },
     },
   },
 };
+
+const STATE_WORDS = { open: 'abierta', closed: 'cerrada', merged: 'fusionada' };
+
+async function setPullState(opts, ref, state) {
+  const { repoDid } = await resolveRepo(opts.repo);
+  const pull = pickPull(await loadItems('pull', whoAmI(), repoDid), ref);
+  if (pull.state === state) {
+    console.log(`La PR "${pull.title}" ya estaba ${STATE_WORDS[state]}.`);
+    return;
+  }
+  const session = await openSession();
+  await session.createRecord(NSID.pullStatus, buildStatusRecord({ pullUri: pull.uri, state }));
+  console.log(`PR "${pull.title}" marcada como ${STATE_WORDS[state]}.`);
+}
