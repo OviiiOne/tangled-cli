@@ -9,7 +9,11 @@ export const NSID = {
   repo: 'sh.tangled.repo',
   pull: 'sh.tangled.repo.pull',
   pullStatus: 'sh.tangled.repo.pull.status',
+  artifact: 'sh.tangled.repo.artifact',
 };
+
+// Lexicon limit for a release file (sh.tangled.repo.artifact, maxSize).
+export const MAX_ARTIFACT_BYTES = 50 * 1024 * 1024;
 
 export const PULL_STATES = {
   open: 'sh.tangled.repo.pull.status.open',
@@ -20,6 +24,11 @@ export const PULL_STATES = {
 const WEB = 'https://tangled.org';
 
 export function repoWebUrl(repoDid) {
+  return `${WEB}/${repoDid}`;
+}
+
+// Public read-only git address; works without credentials.
+export function repoGitUrl(repoDid) {
   return `${WEB}/${repoDid}`;
 }
 
@@ -62,6 +71,24 @@ export function buildPullRecord({ repoDid, title, body, base, head, patchBlob, n
   };
   if (body) record.body = body;
   return record;
+}
+
+// Mirrors appview/repo/artifact.go. The optional "repo" at-uri is left out: the
+// appview looks repos up by repoDid first, and one repoDid can have several repo
+// records (e.g. after a rename), so guessing one could point at the wrong name.
+export function buildArtifactRecord({ repoDid, name, tagHash, blob, now = new Date() }) {
+  return {
+    $type: NSID.artifact,
+    name,
+    repoDid,
+    tag: { $bytes: Buffer.from(tagHash, 'hex').toString('base64').replace(/=+$/, '') },
+    artifact: blob,
+    createdAt: now.toISOString(),
+  };
+}
+
+export function tagHashFromRecord(record) {
+  return Buffer.from(record.tag.$bytes, 'base64').toString('hex');
 }
 
 export function buildStatusRecord({ pullUri, state, now = new Date() }) {

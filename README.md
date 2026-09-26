@@ -36,6 +36,17 @@ tgl pr close <id|rama> [--merged]
 - `pr close` no fusiona: solo cambia el estado. El merge se hace en local y se sube con push.
 - `pr list` muestra solo las PRs creadas con tu cuenta.
 
+## Releases (archivos de una versión)
+
+```text
+tgl release upload v2.4.1 newspal-2.4.1-signed.xpi   # uno o varios archivos
+tgl release list [v2.4.1]
+```
+
+- La etiqueta tiene que ser anotada (`git tag -a`) y estar ya subida a Tangled, igual que en tu copia.
+- `release upload --dry-run` lo comprueba todo sin subir nada.
+- Máximo 50 MB por archivo. No deja subir dos archivos con el mismo nombre a la misma versión.
+
 ## Cómo funciona
 
 En Tangled cada PR es un registro del AT Protocol guardado en la cuenta de quien la crea:
@@ -43,6 +54,7 @@ En Tangled cada PR es un registro del AT Protocol guardado en la cuenta de quien
 - `sh.tangled.repo.pull`: título, ramas y los cambios (`git format-patch`, comprimido con gzip,
   subido como archivo adjunto).
 - `sh.tangled.repo.pull.status`: cada cambio de estado (abierta, cerrada, fusionada).
+- `sh.tangled.repo.artifact`: un archivo de una versión, unido a la etiqueta por su hash.
 
 Estos formatos no tienen documentación oficial y pueden cambiar. Se copian de los
 [lexicons de Tangled](https://tangled.org/tangled.org/core/tree/master/lexicons).

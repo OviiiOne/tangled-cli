@@ -1,6 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildPullRecord, buildStatusRecord, pullStates, PULL_STATES } from '../src/tangled.js';
+import {
+  buildArtifactRecord, buildPullRecord, buildStatusRecord, pullStates, PULL_STATES, tagHashFromRecord,
+} from '../src/tangled.js';
 
 const now = new Date('2026-09-26T10:00:00Z');
 
@@ -41,4 +43,13 @@ test('pull state is the newest status record, open by default', () => {
   assert.equal(stateOf('a'), 'closed');
   assert.equal(stateOf('b'), 'merged');
   assert.equal(stateOf('c'), 'open');
+});
+
+test('artifact tag is the annotated tag hash as unpadded base64 bytes', () => {
+  // Real values from an artifact the Tangled website created for NewsPal v2.4.0.
+  const r = buildArtifactRecord({ repoDid: 'did:plc:repo', name: 'a.xpi', tagHash: '71a54b0b3ef0e0af9de7d32dee444dc875b5b430', blob: {}, now });
+  assert.deepEqual(r.tag, { $bytes: 'caVLCz7w4K+d59Mt7kRNyHW1tDA' });
+  assert.equal(tagHashFromRecord(r), '71a54b0b3ef0e0af9de7d32dee444dc875b5b430');
+  assert.equal(r.$type, 'sh.tangled.repo.artifact');
+  assert.equal(r.repoDid, 'did:plc:repo');
 });

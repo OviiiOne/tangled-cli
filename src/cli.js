@@ -2,10 +2,11 @@ import { parseArgs } from 'node:util';
 import { TglError } from './errors.js';
 import auth from './commands/auth.js';
 import pr from './commands/pr.js';
+import release from './commands/release.js';
 
 // Each topic is a self-contained module: { name, summary, commands }.
-// Adding a topic (release, issue, ...) means adding one file and one line here.
-const TOPICS = [auth, pr];
+// Adding a topic (issue, ...) means adding one file and one line here.
+const TOPICS = [auth, pr, release];
 
 function topicHelp(topic) {
   const lines = [`Uso: tgl ${topic.name} <comando> [opciones]`, '', topic.summary, '', 'Comandos:'];

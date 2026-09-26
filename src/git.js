@@ -22,7 +22,6 @@ export function remoteUrls() {
 export function refExists(ref) {
   return spawnSync('git', ['rev-parse', '--verify', '--quiet', `${ref}^{commit}`]).status === 0;
 }
-
 // Branch name as the forge knows it: "origin/master" and "master" are both "master".
 export function branchName(ref) {
   const full = spawnSync('git', ['rev-parse', '--symbolic-full-name', ref], { encoding: 'utf8' }).stdout.trim();
@@ -33,6 +32,25 @@ export function stripRefPrefix(fullRef) {
   if (fullRef.startsWith('refs/heads/')) return fullRef.slice('refs/heads/'.length);
   const remote = fullRef.match(/^refs\/remotes\/[^/]+\/(.+)$/);
   return remote ? remote[1] : undefined;
+}
+
+// Hash of an annotated tag object: what Tangled attaches release files to.
+export function annotatedTagHash(tag) {
+  if (!refExists(`refs/tags/${tag}`)) throw new TglError(`La etiqueta "${tag}" no existe en este repositorio local.`);
+  if (git(['cat-file', '-t', `refs/tags/${tag}`]).trim() !== 'tag') {
+    throw new TglError(`"${tag}" es una etiqueta ligera. Tangled solo acepta etiquetas anotadas (git tag -a).`);
+  }
+  return git(['rev-parse', `refs/tags/${tag}`]).trim();
+}
+
+// Tag name -> tag object hash, as published on a remote.
+export function remoteTags(url) {
+  const tags = new Map();
+  for (const line of git(['ls-remote', '--tags', url]).split('\n')) {
+    const [hash, ref] = line.split('\t');
+    if (ref && !ref.endsWith('^{}')) tags.set(ref.slice('refs/tags/'.length), hash);
+  }
+  return tags;
 }
 
 // The same "git format-patch" text Tangled's own website stores for a branch PR.
