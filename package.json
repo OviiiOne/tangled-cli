@@ -2,6 +2,7 @@
   "name": "tangled-cli",
   "version": "0.2.0",
   "description": "tgl: manage Tangled (tangled.org) from the terminal",
+  "license": "MIT",
   "private": true,
   "type": "module",
   "bin": {

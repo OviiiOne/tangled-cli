@@ -1,9 +1,11 @@
 // Tangled-specific knowledge: record formats and how to find a repository.
 // Tangled's record formats are not officially documented and may change;
 // they mirror the lexicons in https://tangled.org/tangled.org/core (lexicons/).
-import { listAllRecords, resolveHandle, resolvePds } from './atproto.js';
+import { gunzipSync } from 'node:zlib';
+import { fetchBlob, listAllRecords, resolveDidDoc, resolveHandle, resolvePds, xrpcQuery } from './atproto.js';
 import { remoteUrls } from './git.js';
 import { TglError } from './errors.js';
+import { t } from './i18n.js';
 
 export const NSID = {
   repo: 'sh.tangled.repo',
@@ -45,18 +47,49 @@ export function repoGitUrl(repoDid) {
   return `${WEB}/${repoDid}`;
 }
 
+// The repo's git server (its "knot"), as declared in the repo's DID document: newer
+// repos use a "#tangled_knot" service, older ones list the knot as their data server.
+export async function knotOf(repoDid) {
+  const doc = await resolveDidDoc(repoDid);
+  const knot = doc.service?.find((s) => s.id === '#tangled_knot' || s.type === 'TangledKnot');
+  if (knot) return new URL(knot.serviceEndpoint).origin;
+  return resolvePds(repoDid);
+}
+
+// A PR's changes as git format-patch text. Most PRs carry them as a gzipped file
+// (the newest round), very old ones inline, and some newer branch PRs none at all:
+// then the repo's knot computes them from the branches, as Tangled's website does.
+export async function pullPatch(pull, repoDid) {
+  const round = pull.rounds?.at(-1);
+  if (round) return gunzipSync(await fetchBlob(pull.author, round.patchBlob)).toString('utf8');
+  if (pull.patch) return pull.patch;
+  const sourceRepo = pull.source?.repo?.startsWith('did:') ? pull.source.repo : repoDid;
+  if (!pull.source?.branch) return '';
+  const data = await xrpcQuery(await knotOf(sourceRepo), 'sh.tangled.repo.compare', {
+    repo: sourceRepo, rev1: pull.target.branch, rev2: pull.source.branch,
+  });
+  return data.patch ?? '';
+}
+
+// A PR comes from a fork when its source branch lives in another repo.
+export function isFork(pull, repoDid) {
+  return Boolean(pull.source?.repo) && pull.source.repo !== repoDid;
+}
+
 // Accepts "owner/name", a repo DID, or nothing (then reads the git remotes).
 export async function resolveRepo(spec) {
   if (spec?.startsWith('did:')) return { repoDid: spec, label: spec };
   if (spec) {
     const [owner, name] = spec.split('/');
-    if (!owner || !name) throw new TglError(`Repositorio no válido: "${spec}". Usa cuenta/nombre, por ejemplo oviiione.eu/newspal.`);
+    if (!owner || !name) {
+      throw new TglError(t(`Invalid repository: "${spec}". Use owner/name, e.g. tangled.org/core.`, `Repositorio no válido: "${spec}". Usa cuenta/nombre, por ejemplo tangled.org/core.`));
+    }
     const ownerDid = owner.startsWith('did:') ? owner : await resolveHandle(owner);
     const records = await listAllRecords(await resolvePds(ownerDid), ownerDid, NSID.repo);
     const wanted = name.toLowerCase();
     const found = records.find((r) => r.uri.split('/').pop() === wanted) ??
       records.find((r) => r.value.name?.toLowerCase() === wanted);
-    if (!found?.value.repoDid) throw new TglError(`No encuentro el repositorio "${spec}" en Tangled.`);
+    if (!found?.value.repoDid) throw new TglError(t(`Repository "${spec}" not found on Tangled.`, `No encuentro el repositorio "${spec}" en Tangled.`));
     return { repoDid: found.value.repoDid, label: spec };
   }
   for (const url of remoteUrls()) {
@@ -67,7 +100,10 @@ export async function resolveRepo(spec) {
     const m = url.match(/tangled\.(?:org|sh)[:/]([^/]+\/[^/]+?)(?:\.git)?\/?$/);
     if (m) return resolveRepo(m[1]);
   }
-  throw new TglError('Este repositorio git no tiene ningún remoto de Tangled. Indica el repo con -R cuenta/nombre.');
+  throw new TglError(t(
+    'This git repository has no Tangled remote. Pass the repo with -R owner/name.',
+    'Este repositorio git no tiene ningún remoto de Tangled. Indica el repo con -R cuenta/nombre.',
+  ));
 }
 
 // Mirrors appview/pulls/create.go: target/source also carry a "repoDid" copy
