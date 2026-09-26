@@ -1,13 +1,14 @@
 import { readFileSync, statSync } from 'node:fs';
 import { basename, extname } from 'node:path';
 import { listAllRecords } from '../atproto.js';
-import { readLoginInfo } from '../credentials.js';
+import { whoAmI } from '../credentials.js';
 import { TglError } from '../errors.js';
 import { annotatedTagHash, remoteTags } from '../git.js';
 import {
   buildArtifactRecord, MAX_ARTIFACT_BYTES, NSID, repoGitUrl, repoWebUrl, resolveRepo, tagHashFromRecord,
 } from '../tangled.js';
 import { openSession } from './auth.js';
+import { repoOption } from './shared.js';
 
 const MIME_TYPES = {
   '.xpi': 'application/x-xpinstall',
@@ -30,12 +31,6 @@ function formatSize(bytes) {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
-function whoAmI() {
-  const info = readLoginInfo();
-  if (!info) throw new TglError('No has iniciado sesión. Ejecuta "tgl auth login" en tu terminal.');
-  return info;
-}
-
 async function loadArtifacts(account, repoDid) {
   const records = await listAllRecords(account.pds, account.did, NSID.artifact);
   return records
@@ -56,7 +51,7 @@ export default {
         '  <archivo>    Archivos a adjuntar (máximo 50 MB cada uno)',
         '  --dry-run    Comprobarlo todo sin subir nada',
       ].join('\n'),
-      options: { repo: { type: 'string', short: 'R' }, 'dry-run': { type: 'boolean', default: false } },
+      options: { ...repoOption, 'dry-run': { type: 'boolean', default: false } },
       async run(opts, [tag, ...files]) {
         if (!tag || !files.length) throw new TglError('Indica la etiqueta y al menos un archivo: tgl release upload v1.0.0 archivo.xpi');
         const { repoDid, label } = await resolveRepo(opts.repo);
@@ -97,7 +92,7 @@ export default {
     list: {
       summary: 'Ver los archivos subidos a cada versión',
       usage: 'Uso: tgl release list [<etiqueta>] [-R cuenta/nombre]\n\nMuestra solo los archivos subidos con tu cuenta.',
-      options: { repo: { type: 'string', short: 'R' } },
+      options: repoOption,
       async run(opts, [tag]) {
         const { repoDid, label } = await resolveRepo(opts.repo);
         const names = new Map([...remoteTags(repoGitUrl(repoDid))].map(([name, hash]) => [hash, name]));

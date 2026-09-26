@@ -1,12 +1,14 @@
 import { parseArgs } from 'node:util';
+import { reportUnreachable } from './backlinks.js';
 import { TglError } from './errors.js';
 import auth from './commands/auth.js';
+import issue from './commands/issue.js';
 import pr from './commands/pr.js';
 import release from './commands/release.js';
 
 // Each topic is a self-contained module: { name, summary, commands }.
-// Adding a topic (issue, ...) means adding one file and one line here.
-const TOPICS = [auth, pr, release];
+// Adding a topic means adding one file and one line here.
+const TOPICS = [auth, pr, issue, release];
 
 function topicHelp(topic) {
   const lines = [`Uso: tgl ${topic.name} <comando> [opciones]`, '', topic.summary, '', 'Comandos:'];
@@ -62,6 +64,7 @@ export async function main(argv) {
       strict: true,
     });
     await command.run(values, positionals);
+    reportUnreachable();
     return 0;
   } catch (err) {
     if (err instanceof TglError) {

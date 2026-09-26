@@ -57,7 +57,8 @@ export async function resolvePds(did) {
 export async function xrpcQuery(host, nsid, params = {}) {
   const qs = new URLSearchParams();
   for (const [k, v] of Object.entries(params)) if (v !== undefined) qs.set(k, v);
-  return readJson(await fetch(`${host}/xrpc/${nsid}?${qs}`), nsid);
+  // Other people's servers can hang; don't let one stall the whole command.
+  return readJson(await fetch(`${host}/xrpc/${nsid}?${qs}`, { signal: AbortSignal.timeout(15_000) }), nsid);
 }
 
 // Lists every record of a collection, following pagination.
@@ -70,6 +71,57 @@ export async function listAllRecords(pds, repo, collection) {
     cursor = page.records.length ? page.cursor : undefined;
   } while (cursor);
   return records;
+}
+
+const pdsCache = new Map();
+
+function cachedPds(did) {
+  if (!pdsCache.has(did)) pdsCache.set(did, resolvePds(did));
+  return pdsCache.get(did);
+}
+
+// Fetches one record by its at:// address from its author's server; null if deleted.
+export async function getRecord(uri) {
+  const [did, collection, rkey] = uri.replace('at://', '').split('/');
+  try {
+    const data = await xrpcQuery(await cachedPds(did), 'com.atproto.repo.getRecord', { repo: did, collection, rkey });
+    return { uri, value: data.value };
+  } catch (err) {
+    if (err.xrpcError === 'RecordNotFound') return null;
+    throw err;
+  }
+}
+
+// Downloads a file (blob) attached to one of `did`'s records.
+export async function fetchBlob(did, blob) {
+  const qs = new URLSearchParams({ did, cid: blob.ref.$link });
+  const res = await fetch(`${await cachedPds(did)}/xrpc/com.atproto.sync.getBlob?${qs}`);
+  if (!res.ok) throw new TglError(`No se pudo descargar el archivo adjunto (HTTP ${res.status}).`);
+  return Buffer.from(await res.arrayBuffer());
+}
+
+// Public handle of an account, or its DID if it has none.
+export async function handleOf(did) {
+  try {
+    const aka = (await resolveDidDoc(did)).alsoKnownAs?.find((a) => a.startsWith('at://'));
+    return aka ? aka.slice('at://'.length) : did;
+  } catch {
+    return did;
+  }
+}
+
+// Runs fn over items with at most `limit` requests in flight.
+export async function mapLimit(items, limit, fn) {
+  const results = new Array(items.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const i = next++;
+      results[i] = await fn(items[i]);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
 }
 
 export class Session {

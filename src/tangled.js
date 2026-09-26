@@ -9,7 +9,17 @@ export const NSID = {
   repo: 'sh.tangled.repo',
   pull: 'sh.tangled.repo.pull',
   pullStatus: 'sh.tangled.repo.pull.status',
+  pullComment: 'sh.tangled.repo.pull.comment',
   artifact: 'sh.tangled.repo.artifact',
+  collaborator: 'sh.tangled.repo.collaborator',
+  issue: 'sh.tangled.repo.issue',
+  issueState: 'sh.tangled.repo.issue.state',
+  issueComment: 'sh.tangled.repo.issue.comment',
+};
+
+export const ISSUE_STATES = {
+  open: 'sh.tangled.repo.issue.state.open',
+  closed: 'sh.tangled.repo.issue.state.closed',
 };
 
 // Lexicon limit for a release file (sh.tangled.repo.artifact, maxSize).
@@ -22,6 +32,9 @@ export const PULL_STATES = {
 };
 
 const WEB = 'https://tangled.org';
+
+// Tangled's own account; the appview accepts its state changes on any repo.
+export const TANGLED_DID = 'did:plc:wshs7t2adsemcrrd4snkeqli';
 
 export function repoWebUrl(repoDid) {
   return `${WEB}/${repoDid}`;
@@ -95,13 +108,36 @@ export function buildStatusRecord({ pullUri, state, now = new Date() }) {
   return { $type: NSID.pullStatus, pull: pullUri, status: PULL_STATES[state], createdAt: now.toISOString() };
 }
 
-// A pull's state is its newest status record; with none it is open.
-export function pullStates(statusRecords) {
-  const latest = new Map();
-  for (const { value } of statusRecords) {
-    const prev = latest.get(value.pull);
-    if (!prev || value.createdAt > prev.createdAt) latest.set(value.pull, value);
+export function buildPullCommentRecord({ pullUri, body, now = new Date() }) {
+  return { $type: NSID.pullComment, pull: pullUri, body, createdAt: now.toISOString() };
+}
+
+export function buildIssueRecord({ repoDid, title, body, now = new Date() }) {
+  return { $type: NSID.issue, repo: repoDid, title, body, createdAt: now.toISOString() };
+}
+
+export function buildIssueStateRecord({ issueUri, state, now = new Date() }) {
+  return { $type: NSID.issueState, issue: issueUri, state: ISSUE_STATES[state], createdAt: now.toISOString() };
+}
+
+export function buildIssueCommentRecord({ issueUri, body, now = new Date() }) {
+  return { $type: NSID.issueComment, issue: issueUri, body, createdAt: now.toISOString() };
+}
+
+export function authorOf(uri) {
+  return uri.replace('at://', '').split('/')[0];
+}
+
+// State of one PR or issue: its newest state record written by someone Tangled
+// accepts (the author or the repo owner, see authorizeStateRecord in
+// appview/ingester.go); with none it is open. `field` is "status" for PRs and
+// "state" for issues; `known` maps short names to the record values.
+export function latestState(stateRecords, { field, known, allowed }) {
+  let latest;
+  for (const r of stateRecords) {
+    if (!allowed.has(authorOf(r.uri))) continue;
+    if (!latest || r.value.createdAt > latest.value.createdAt) latest = r;
   }
-  const names = Object.fromEntries(Object.entries(PULL_STATES).map(([k, v]) => [v, k]));
-  return (pullUri) => names[latest.get(pullUri)?.status] ?? 'open';
+  const names = Object.fromEntries(Object.entries(known).map(([k, v]) => [v, k]));
+  return names[latest?.value[field]] ?? 'open';
 }

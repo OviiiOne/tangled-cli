@@ -80,6 +80,13 @@ export function readLoginInfo() {
   return { handle, did, pds, savedAt, file: loginFile() };
 }
 
+// The logged-in account (no password needed): for reading public records.
+export function whoAmI() {
+  const info = readLoginInfo();
+  if (!info) throw new TglError('No has iniciado sesión. Ejecuta "tgl auth login" en tu terminal.');
+  return info;
+}
+
 export function deleteLogin() {
   rmSync(loginFile(), { force: true });
 }

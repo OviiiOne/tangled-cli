@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  buildArtifactRecord, buildPullRecord, buildStatusRecord, pullStates, PULL_STATES, tagHashFromRecord,
+  buildArtifactRecord, buildIssueRecord, buildIssueStateRecord, buildPullRecord, buildStatusRecord,
+  ISSUE_STATES, latestState, PULL_STATES, tagHashFromRecord,
 } from '../src/tangled.js';
 
 const now = new Date('2026-09-26T10:00:00Z');
@@ -34,15 +35,24 @@ test('status record', () => {
   });
 });
 
-test('pull state is the newest status record, open by default', () => {
-  const stateOf = pullStates([
-    { value: { pull: 'a', status: PULL_STATES.closed, createdAt: '2026-01-02T00:00:00Z' } },
-    { value: { pull: 'a', status: PULL_STATES.open, createdAt: '2026-01-01T00:00:00Z' } },
-    { value: { pull: 'b', status: PULL_STATES.merged, createdAt: '2026-01-01T00:00:00Z' } },
-  ]);
-  assert.equal(stateOf('a'), 'closed');
-  assert.equal(stateOf('b'), 'merged');
-  assert.equal(stateOf('c'), 'open');
+test('state is the newest record by an allowed author, open by default', () => {
+  const rec = (did, status, createdAt) => ({ uri: `at://${did}/sh.tangled.repo.pull.status/x`, value: { status, createdAt } });
+  const opts = { field: 'status', known: PULL_STATES, allowed: new Set(['did:author', 'did:owner']) };
+  assert.equal(latestState([], opts), 'open');
+  assert.equal(latestState([
+    rec('did:author', PULL_STATES.closed, '2026-01-02T00:00:00Z'),
+    rec('did:owner', PULL_STATES.merged, '2026-01-03T00:00:00Z'),
+    rec('did:author', PULL_STATES.open, '2026-01-01T00:00:00Z'),
+  ], opts), 'merged');
+  // Tangled ignores state changes from strangers, so must we.
+  assert.equal(latestState([rec('did:stranger', PULL_STATES.closed, '2026-01-09T00:00:00Z')], opts), 'open');
+});
+
+test('issue records', () => {
+  assert.deepEqual(buildIssueRecord({ repoDid: 'did:plc:repo', title: 'T', body: 'B', now }), {
+    $type: 'sh.tangled.repo.issue', repo: 'did:plc:repo', title: 'T', body: 'B', createdAt: now.toISOString(),
+  });
+  assert.equal(buildIssueStateRecord({ issueUri: 'at://i', state: 'closed', now }).state, ISSUE_STATES.closed);
 });
 
 test('artifact tag is the annotated tag hash as unpadded base64 bytes', () => {
