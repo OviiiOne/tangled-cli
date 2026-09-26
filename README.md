@@ -95,7 +95,8 @@ account. A PR or an issue is a record in its author's account that points at the
   author, the repo owner, a collaborator or Tangled itself.
 
 Records used: `sh.tangled.repo.pull` (with the changes as a gzipped `git format-patch`),
-`.pull.status`, `.pull.comment`, `sh.tangled.repo.issue`, `.issue.state`, `.issue.comment`
+`.pull.status`, `sh.tangled.repo.issue`, `.issue.state`, `sh.tangled.feed.comment` (comments on both;
+the older `.pull.comment` and `.issue.comment` are still read)
 and `sh.tangled.repo.artifact` (a release file, linked to its tag by the tag's hash).
 
 These formats have no official documentation and may change. They follow

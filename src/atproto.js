@@ -92,7 +92,7 @@ export async function getRecord(uri) {
   for (const host of [SLINGSHOT, null]) {
     try {
       const data = await xrpcQuery(host ?? await cachedPds(did), 'com.atproto.repo.getRecord', params);
-      return { uri, value: data.value };
+      return { uri, cid: data.cid, value: data.value };
     } catch (err) {
       if (host === null) {
         if (err.xrpcError === 'RecordNotFound') return null;

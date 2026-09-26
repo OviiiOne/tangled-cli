@@ -4,7 +4,7 @@ import { handleOf } from '../atproto.js';
 import { recordsLinkingTo } from '../backlinks.js';
 import { TglError } from '../errors.js';
 import { t } from '../i18n.js';
-import { authorOf } from '../tangled.js';
+import { authorOf, commentText, NSID } from '../tangled.js';
 
 export const repoOption = { repo: { type: 'string', short: 'R' } };
 export const jsonOption = { json: { type: 'boolean', default: false } };
@@ -40,10 +40,14 @@ export function day(isoDate) {
   return (isoDate ?? '').slice(0, 10);
 }
 
-export async function loadComments(account, subjectUri, collection, path) {
-  const records = await recordsLinkingTo({ account, collection, links: [{ target: subjectUri, path }] });
-  const comments = records
-    .map((r) => ({ uri: r.uri, author: authorOf(r.uri), body: r.value.body ?? '', createdAt: r.value.createdAt ?? '' }))
+// Comments in the current format plus those in the deprecated per-kind collection.
+export async function loadComments(account, subjectUri, legacy) {
+  const [current, old] = await Promise.all([
+    recordsLinkingTo({ account, collection: NSID.comment, links: [{ target: subjectUri, path: '.subject.uri' }] }),
+    recordsLinkingTo({ account, collection: legacy.collection, links: [{ target: subjectUri, path: legacy.path }] }),
+  ]);
+  const comments = [...current, ...old]
+    .map((r) => ({ uri: r.uri, author: authorOf(r.uri), body: commentText(r.value), createdAt: r.value.createdAt ?? '' }))
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   await Promise.all(comments.map(async (c) => { c.authorHandle = await handleOf(c.author); }));
   return comments;

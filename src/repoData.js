@@ -63,6 +63,7 @@ export async function loadItems(kind, account, repoDid, { state = 'all', limit =
       return {
         ...normalize(kind, r.value),
         uri: r.uri,
+        cid: r.cid,
         rkey: r.uri.split('/').pop(),
         author,
         state: latestState(states, { field: k.stateField, known: k.known, allowed: new Set([author, ...editors]) }),

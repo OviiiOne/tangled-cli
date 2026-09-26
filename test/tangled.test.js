@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  buildArtifactRecord, buildIssueRecord, buildIssueStateRecord, buildPullRecord, buildStatusRecord,
+  buildArtifactRecord, buildCommentRecord, buildIssueRecord, commentText, buildIssueStateRecord, buildPullRecord, buildStatusRecord,
   ISSUE_STATES, latestState, PULL_STATES, tagHashFromRecord,
 } from '../src/tangled.js';
 
@@ -62,4 +62,17 @@ test('artifact tag is the annotated tag hash as unpadded base64 bytes', () => {
   assert.equal(tagHashFromRecord(r), '71a54b0b3ef0e0af9de7d32dee444dc875b5b430');
   assert.equal(r.$type, 'sh.tangled.repo.artifact');
   assert.equal(r.repoDid, 'did:plc:repo');
+});
+
+test('comments use the shared feed.comment format with a strong reference', () => {
+  const r = buildCommentRecord({ subject: { uri: 'at://did:x/sh.tangled.repo.pull/1', cid: 'bafy', extra: 1 }, body: 'Hi', pullRoundIdx: 0, now });
+  assert.deepEqual(r, {
+    $type: 'sh.tangled.feed.comment',
+    subject: { uri: 'at://did:x/sh.tangled.repo.pull/1', cid: 'bafy' },
+    body: { $type: 'sh.tangled.markup.markdown', text: 'Hi', original: 'Hi' },
+    createdAt: now.toISOString(),
+    pullRoundIdx: 0,
+  });
+  assert.equal(commentText(r), 'Hi');
+  assert.equal(commentText({ body: 'old plain text' }), 'old plain text');
 });

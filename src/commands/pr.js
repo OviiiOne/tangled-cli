@@ -7,7 +7,7 @@ import {
 import { t } from '../i18n.js';
 import { isIdOf, loadItems, notFound } from '../repoData.js';
 import {
-  buildPullCommentRecord, buildPullRecord, buildStatusRecord, isFork, NSID, pullPatch, repoGitUrl, repoWebUrl, resolveRepo,
+  buildCommentRecord, buildPullRecord, buildStatusRecord, isFork, NSID, pullPatch, repoGitUrl, repoWebUrl, resolveRepo,
 } from '../tangled.js';
 import { openSession } from './auth.js';
 import {
@@ -171,7 +171,7 @@ export default {
         const { pull, repoDid } = await findPull(opts, ref);
         const patch = await pullPatch(pull, repoDid);
         const files = changedFiles(patch);
-        const comments = await loadComments(whoAmI(), pull.uri, NSID.pullComment, '.pull');
+        const comments = await loadComments(whoAmI(), pull.uri, { collection: NSID.legacyPullComment, path: '.pull' });
         const revisions = Math.max(pull.rounds?.length ?? 0, 1);
         if (opts.json) {
           const { rounds, patch: _inline, ...rest } = pull;
@@ -257,7 +257,8 @@ export default {
         const body = readBody(opts, { required: true });
         const { pull } = await findPull(opts, ref);
         const session = await openSession();
-        await session.createRecord(NSID.pullComment, buildPullCommentRecord({ pullUri: pull.uri, body }));
+        const pullRoundIdx = Math.max((pull.rounds?.length ?? 1) - 1, 0);
+        await session.createRecord(NSID.comment, buildCommentRecord({ subject: pull, body, pullRoundIdx }));
         console.log(t(`Comment posted on "${pull.title}".`, `Comentario publicado en "${pull.title}".`));
       },
     },

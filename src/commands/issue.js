@@ -3,7 +3,7 @@ import { TglError } from '../errors.js';
 import { t } from '../i18n.js';
 import { findById, loadItems } from '../repoData.js';
 import {
-  buildIssueCommentRecord, buildIssueRecord, buildIssueStateRecord, NSID, repoWebUrl, resolveRepo,
+  buildCommentRecord, buildIssueRecord, buildIssueStateRecord, NSID, repoWebUrl, resolveRepo,
 } from '../tangled.js';
 import { openSession } from './auth.js';
 import {
@@ -27,7 +27,7 @@ async function setIssueState(opts, ref, state) {
   }
   const session = await openSession();
   if (body?.trim()) {
-    await session.createRecord(NSID.issueComment, buildIssueCommentRecord({ issueUri: issue.uri, body }));
+    await session.createRecord(NSID.comment, buildCommentRecord({ subject: issue, body }));
   }
   await session.createRecord(NSID.issueState, buildIssueStateRecord({ issueUri: issue.uri, state }));
   console.log(t(`Issue "${issue.title}" marked as ${STATE_WORDS[state]()}.`, `Issue "${issue.title}" marcada como ${STATE_WORDS[state]()}.`));
@@ -96,7 +96,7 @@ export default {
       options: { ...repoOption, ...jsonOption },
       async run(opts, [ref]) {
         const issue = await findIssue(opts, ref);
-        const comments = await loadComments(whoAmI(), issue.uri, NSID.issueComment, '.issue');
+        const comments = await loadComments(whoAmI(), issue.uri, { collection: NSID.legacyIssueComment, path: '.issue' });
         if (opts.json) {
           printJson({ id: issue.rkey, ...issue, comments });
           return;
@@ -118,7 +118,7 @@ export default {
         const body = readBody(opts, { required: true });
         const issue = await findIssue(opts, ref);
         const session = await openSession();
-        await session.createRecord(NSID.issueComment, buildIssueCommentRecord({ issueUri: issue.uri, body }));
+        await session.createRecord(NSID.comment, buildCommentRecord({ subject: issue, body }));
         console.log(t(`Comment posted on "${issue.title}".`, `Comentario publicado en "${issue.title}".`));
       },
     },

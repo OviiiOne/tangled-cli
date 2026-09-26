@@ -11,12 +11,13 @@ export const NSID = {
   repo: 'sh.tangled.repo',
   pull: 'sh.tangled.repo.pull',
   pullStatus: 'sh.tangled.repo.pull.status',
-  pullComment: 'sh.tangled.repo.pull.comment',
+  comment: 'sh.tangled.feed.comment',
+  legacyPullComment: 'sh.tangled.repo.pull.comment',
   artifact: 'sh.tangled.repo.artifact',
   collaborator: 'sh.tangled.repo.collaborator',
   issue: 'sh.tangled.repo.issue',
   issueState: 'sh.tangled.repo.issue.state',
-  issueComment: 'sh.tangled.repo.issue.comment',
+  legacyIssueComment: 'sh.tangled.repo.issue.comment',
 };
 
 export const ISSUE_STATES = {
@@ -144,8 +145,23 @@ export function buildStatusRecord({ pullUri, state, now = new Date() }) {
   return { $type: NSID.pullStatus, pull: pullUri, status: PULL_STATES[state], createdAt: now.toISOString() };
 }
 
-export function buildPullCommentRecord({ pullUri, body, now = new Date() }) {
-  return { $type: NSID.pullComment, pull: pullUri, body, createdAt: now.toISOString() };
+// Comments on issues and PRs (lexicons/feed/comment.json). They point at their subject
+// with a strong reference (address + content hash); a PR comment also names the
+// revision it is about. The older per-kind comment collections are deprecated: Tangled
+// no longer shows new ones, but old ones are still read.
+export function buildCommentRecord({ subject, body, pullRoundIdx, now = new Date() }) {
+  const record = {
+    $type: NSID.comment,
+    subject: { uri: subject.uri, cid: subject.cid },
+    body: { $type: 'sh.tangled.markup.markdown', text: body, original: body },
+    createdAt: now.toISOString(),
+  };
+  if (pullRoundIdx !== undefined) record.pullRoundIdx = pullRoundIdx;
+  return record;
+}
+
+export function commentText(value) {
+  return typeof value.body === 'string' ? value.body : value.body?.text ?? '';
 }
 
 export function buildIssueRecord({ repoDid, title, body, now = new Date() }) {
@@ -154,10 +170,6 @@ export function buildIssueRecord({ repoDid, title, body, now = new Date() }) {
 
 export function buildIssueStateRecord({ issueUri, state, now = new Date() }) {
   return { $type: NSID.issueState, issue: issueUri, state: ISSUE_STATES[state], createdAt: now.toISOString() };
-}
-
-export function buildIssueCommentRecord({ issueUri, body, now = new Date() }) {
-  return { $type: NSID.issueComment, issue: issueUri, body, createdAt: now.toISOString() };
 }
 
 export function authorOf(uri) {
