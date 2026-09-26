@@ -4,3 +4,6 @@ node_modules/
 *.secret
 credentials*.json
 .env
+
+# Claude working files (local only)
+.claude/
