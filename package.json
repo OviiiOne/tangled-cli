@@ -1,0 +1,16 @@
+{
+  "name": "tangled-cli",
+  "version": "0.1.0",
+  "description": "tgl: manage Tangled (tangled.org) from the terminal",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "tgl": "bin/tgl.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --test"
+  }
+}
