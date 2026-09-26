@@ -17,11 +17,19 @@ function loginFile() {
   return join(configDir(), 'login.json');
 }
 
+// Calls DPAPI through .NET directly rather than the SecureString cmdlets: when started
+// from PowerShell 7, the inherited PSModulePath stops Windows PowerShell from loading them.
+const LOAD_DPAPI = "[void][Reflection.Assembly]::LoadWithPartialName('System.Security'); " +
+  '$scope = [Security.Cryptography.DataProtectionScope]::CurrentUser; ';
+
 // The secret travels through stdin, never as a command-line argument,
 // so it does not show up in the list of running processes.
 function powershell(script, input) {
-  const res = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], {
+  const env = { ...process.env };
+  delete env.PSModulePath;
+  const res = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', LOAD_DPAPI + script], {
     input,
+    env,
     encoding: 'utf8',
   });
   if (res.status !== 0) {
@@ -33,7 +41,8 @@ function powershell(script, input) {
 function protect(secret) {
   if (!IS_WINDOWS) return { scheme: 'plain', value: secret };
   const value = powershell(
-    '$p = [Console]::In.ReadToEnd(); ConvertTo-SecureString -String $p -AsPlainText -Force | ConvertFrom-SecureString',
+    '$b = [Text.Encoding]::UTF8.GetBytes([Console]::In.ReadToEnd()); ' +
+      '[Convert]::ToBase64String([Security.Cryptography.ProtectedData]::Protect($b, $null, $scope))',
     secret,
   );
   return { scheme: 'dpapi', value };
@@ -43,7 +52,8 @@ function unprotect({ scheme, value }) {
   if (scheme === 'plain') return value;
   if (scheme === 'dpapi') {
     return powershell(
-      '$e = [Console]::In.ReadToEnd().Trim(); $s = ConvertTo-SecureString -String $e; [Console]::Out.Write([Net.NetworkCredential]::new("", $s).Password)',
+      '$e = [Convert]::FromBase64String([Console]::In.ReadToEnd().Trim()); ' +
+        '[Console]::Out.Write([Text.Encoding]::UTF8.GetString([Security.Cryptography.ProtectedData]::Unprotect($e, $null, $scope)))',
       value,
     );
   }
