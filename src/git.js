@@ -23,6 +23,18 @@ export function refExists(ref) {
   return spawnSync('git', ['rev-parse', '--verify', '--quiet', `${ref}^{commit}`]).status === 0;
 }
 
+// Branch name as the forge knows it: "origin/master" and "master" are both "master".
+export function branchName(ref) {
+  const full = spawnSync('git', ['rev-parse', '--symbolic-full-name', ref], { encoding: 'utf8' }).stdout.trim();
+  return stripRefPrefix(full) ?? ref;
+}
+
+export function stripRefPrefix(fullRef) {
+  if (fullRef.startsWith('refs/heads/')) return fullRef.slice('refs/heads/'.length);
+  const remote = fullRef.match(/^refs\/remotes\/[^/]+\/(.+)$/);
+  return remote ? remote[1] : undefined;
+}
+
 // The same "git format-patch" text Tangled's own website stores for a branch PR.
 export function formatPatch(base, head) {
   for (const ref of [base, head]) {
