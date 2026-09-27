@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   buildArtifactRecord, buildCommentRecord, buildIssueRecord, commentText, buildIssueStateRecord, buildPullRecord, buildStatusRecord,
-  closingRefs, ISSUE_STATES, latestState, parseNumber, PULL_STATES, tagHashFromRecord,
+  closingRefs, ISSUE_STATES, latestState, linkClosingRefs, parseNumber, PULL_STATES, tagHashFromRecord,
 } from '../src/tangled.js';
 
 const now = new Date('2026-09-26T10:00:00Z');
@@ -99,4 +99,12 @@ test('website numbers', () => {
   assert.equal(parseNumber('7'), 7);
   assert.equal(parseNumber('3mfq2kx7abcd2'), undefined);
   assert.equal(parseNumber(undefined), undefined);
+});
+
+test('closing numbers become links to the issue, and are still read back', () => {
+  const linked = linkClosingRefs('Fixes #1, closes: #2. See #3.', 'did:plc:repo');
+  assert.equal(linked, 'Fixes [#1](https://tangled.org/did:plc:repo/issues/1), closes: [#2](https://tangled.org/did:plc:repo/issues/2). See #3.');
+  assert.equal(linkClosingRefs(linked, 'did:plc:repo'), linked);
+  assert.deepEqual(closingRefs(linked), [{ number: 1, repo: 'did:plc:repo' }, { number: 2, repo: 'did:plc:repo' }]);
+  assert.equal(linkClosingRefs(undefined, 'did:plc:repo'), undefined);
 });

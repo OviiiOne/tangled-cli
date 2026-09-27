@@ -7,8 +7,8 @@ import {
 import { t, textLanguage } from '../i18n.js';
 import { expandNumber, findById, isIdOf, loadItems, notFound, repoPeople } from '../repoData.js';
 import {
-  buildCommentRecord, buildIssueStateRecord, buildPullRecord, buildStatusRecord, closingRefs, isFork, NSID, pullPatch, repoGitUrl,
-  repoWebUrl, resolveRepo,
+  buildCommentRecord, buildIssueStateRecord, buildPullRecord, buildStatusRecord, closingRefs, isFork, linkClosingRefs, NSID, numberForUri,
+  pullPatch, repoGitUrl, repoWebUrl, resolveRepo,
 } from '../tangled.js';
 import { openSession } from './auth.js';
 import {
@@ -60,16 +60,19 @@ async function setPullState(opts, ref, state) {
     return;
   }
   const session = await openSession();
+  const closeIssues = state === 'merged' && !opts['keep-issues'] && closingRefs(`${pull.title}\n${pull.body ?? ''}`).length > 0;
+  // Read while the PR is still listed under its old state, for the link in the comments.
+  const number = closeIssues ? await numberForUri(repoDid, 'pull', { uri: pull.uri, title: pull.title, state: pull.state }) : null;
   await session.createRecord(NSID.pullStatus, buildStatusRecord({ pullUri: pull.uri, state }));
   console.log(t(`PR "${pull.title}" marked as ${STATE_WORDS[state]()}.`, `PR "${pull.title}" marcada como ${STATE_WORDS[state]()}.`));
-  if (state === 'merged' && !opts['keep-issues']) await closeLinkedIssues(session, pull, repoDid);
+  if (closeIssues) await closeLinkedIssues(session, pull, repoDid, number);
 }
 
-// Closes the issues a merged PR says it fixes ("Fixes #12"), with a comment naming the
-// PR. Tangled doesn't do this itself yet. Issues of other repos are left alone.
-async function closeLinkedIssues(session, pull, repoDid) {
+// Closes the issues a merged PR says it fixes ("Fixes #12"), with a comment linking to
+// the PR. Tangled doesn't do this itself yet. Issues of other repos are left alone.
+async function closeLinkedIssues(session, pull, repoDid, number) {
   const refs = closingRefs(`${pull.title}\n${pull.body ?? ''}`);
-  if (!refs.length) return;
+  const prLink = number ? `[#${number}](${repoWebUrl(repoDid)}/pulls/${number}) ` : '';
   const editors = new Set((await repoPeople(whoAmI(), repoDid)).editors);
   const done = new Set();
   for (const ref of refs) {
@@ -90,8 +93,8 @@ async function closeLinkedIssues(session, pull, repoDid) {
       }
       // A public comment: in the issue's language, not the user's.
       const body = textLanguage(`${issue.title}\n${issue.body ?? ''}`) === 'es'
-        ? `Cerrada por la PR fusionada "${pull.title}".`
-        : `Closed by the merged PR "${pull.title}".`;
+        ? `Cerrada por la PR fusionada ${prLink}"${pull.title}".`
+        : `Closed by the merged PR ${prLink}"${pull.title}".`;
       await session.createRecord(NSID.comment, buildCommentRecord({ subject: issue, body }));
       await session.createRecord(NSID.issueState, buildIssueStateRecord({ issueUri: issue.uri, state: 'closed' }));
       console.log(t(`Issue ${label} "${issue.title}" closed.`, `Issue ${label} "${issue.title}" cerrada.`));
@@ -185,7 +188,7 @@ export default {
           `PR: ${headBranch} -> ${base} (${commits} commit${commits === 1 ? '' : 's'}, parche de ${gz.length} bytes comprimido)`,
         ));
 
-        const fields = { repoDid, title: opts.title, body, base, head: headBranch };
+        const fields = { repoDid, title: opts.title, body: linkClosingRefs(body, repoDid), base, head: headBranch };
         if (opts['dry-run']) {
           console.log(t('\nThis record would be created (nothing was created):', '\nSe crearía este registro (no se ha creado nada):'));
           printJson(buildPullRecord({ ...fields, patchBlob: t('<compressed patch>', '<parche comprimido>') }));
@@ -357,8 +360,8 @@ export default {
       ]).join('\n'),
       options: { ...repoOption, title: { type: 'string', short: 't' }, ...bodyOptions },
       async run(opts, [ref]) {
-        const body = readBody(opts);
-        const { pull } = await findPull(opts, ref);
+        const { pull, repoDid } = await findPull(opts, ref);
+        const body = linkClosingRefs(readBody(opts), repoDid);
         const session = await openSession();
         const value = await editTitleBody(session, pull, { title: opts.title, body }, { en: 'PR', es: 'PR' });
         console.log(t(`PR "${value.title}" updated.`, `PR "${value.title}" actualizada.`));

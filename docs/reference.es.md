@@ -45,6 +45,8 @@
   local y se sube con push. También cierra las issues que la PR nombra como `Fixes #12` (o
   `Closes`, `Resolves`, o con un enlace a la issue), con un comentario que nombra la PR;
   `--keep-issues` las deja abiertas. Solo issues del mismo repo, y solo si puedes cerrarlas.
+  `pr create` y `pr edit` convierten ese `#12` en un enlace a la issue (Tangled muestra un
+  `#12` suelto como texto), y el comentario de cierre enlaza de vuelta a la PR.
 - `pr create` y `pr update` se paran si la rama tiene commits sin subir a Tangled
   (`--allow-unpushed` sigue de todos modos). Una PR de Tangled se queda con los cambios con
   los que se envió: tras nuevos commits, súbelos y ejecuta `pr update`.

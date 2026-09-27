@@ -46,6 +46,8 @@
   locally and push. It also closes the issues the PR names as `Fixes #12` (or `Closes`,
   `Resolves`, or with a link to the issue), with a comment naming the PR; `--keep-issues`
   leaves them open. Only issues of the same repo, and only if you may close them.
+  `pr create` and `pr edit` turn that `#12` into a link to the issue (Tangled shows a
+  plain `#12` as text), and the closing comment links back to the PR.
 - `pr create` and `pr update` stop if the branch has commits that aren't pushed to Tangled
   (`--allow-unpushed` goes ahead anyway). A Tangled PR keeps the changes it was sent with:
   after new commits, push them and run `pr update`.

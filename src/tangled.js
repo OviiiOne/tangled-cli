@@ -91,13 +91,40 @@ export async function uriForNumber(repoDid, kind, number) {
   return m?.[1] ?? null;
 }
 
+const CLOSING = /\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?):?\s+(\S+)/gi;
+
+// Tangled's website shows "#12" as plain text (it isn't GitHub), so "Fixes #12" becomes
+// "Fixes [#12](https://tangled.org/<repo DID>/issues/12)": the text still reads "#12",
+// but it links to the issue. Plain "#12" without a keyword is left alone: issues and PRs
+// are numbered separately, so it could be either.
+export function linkClosingRefs(text, repoDid) {
+  return text?.replace(/\b((?:close[sd]?|fix(?:e[sd])?|resolve[sd]?):?\s+)#(\d+)\b/gi, `$1[#$2](${repoWebUrl(repoDid)}/issues/$2)`);
+}
+
+// The website number of an issue or PR we have the address of, read from the list page
+// where it shows next to its title (and checked on its own page). Null if not found
+// among the newest of that state.
+export async function numberForUri(repoDid, kind, { uri, title, state }) {
+  const path = kind === 'pull' ? 'pulls' : 'issues';
+  const res = await fetch(`${repoWebUrl(repoDid)}/${path}?state=${state}`, { signal: AbortSignal.timeout(15_000) });
+  if (!res.ok) return null;
+  const html = (await res.text()).replace(/\s+/g, ' ');
+  const escaped = title.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&#34;').replace(/'/g, '&#39;');
+  for (const [, number, text] of html.matchAll(new RegExp(`href="/[^"]+/${path}/(\\d+)"[^>]*>([^<]*)<`, 'g'))) {
+    if (text.trim() !== escaped && text.trim() !== title) continue;
+    if (await uriForNumber(repoDid, kind, number) === uri) return Number(number);
+  }
+  return null;
+}
+
 // Issues a PR says it closes, as GitHub reads them: "Fixes #12", "closes: <issue link>",
 // "Resolves at://…/sh.tangled.repo.issue/…". Returns { number, repo? } or { uri }, where
 // `repo` is the "owner/name" or DID from a link (to check it is this repo).
 export function closingRefs(text) {
   const refs = [];
-  for (const [, token] of (text ?? '').matchAll(/\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?):?\s+(\S+)/gi)) {
-    const ref = token.replace(/[.,;:!?)\]]+$/, '');
+  for (const [, token] of (text ?? '').matchAll(CLOSING)) {
+    // A markdown link, as linkClosingRefs writes it: "[#12](https://tangled.org/…/issues/12)".
+    const ref = (token.match(/^\[[^\]]*\]\(([^)\s]+)\)/)?.[1] ?? token).replace(/[.,;:!?)\]]+$/, '');
     const number = parseNumber(ref);
     const link = ref.match(/^(?:https?:\/\/)?tangled\.(?:org|sh)\/(did:[^/]+|[^/]+\/[^/]+)\/issues\/(\d+)$/);
     const uri = ref.match(new RegExp(`^at://[^/]+/${NSID.issue.replaceAll('.', '\\.')}/[a-z0-9]+$`));
