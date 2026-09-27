@@ -8,7 +8,7 @@ import {
   authorOf, buildRepoRecord, DEFAULT_KNOT, knotOf, NSID, repoGitUrl, repoNameProblem, repoWebUrl, resolveRepo,
 } from '../tangled.js';
 import { openSession } from './auth.js';
-import { jsonOption, printJson, repoOption } from './shared.js';
+import { jsonOption, openInBrowser, printJson, repoOption, webOption } from './shared.js';
 
 function remoteBranches(url) {
   return [...git(['ls-remote', '--heads', url]).matchAll(/\trefs\/heads\/(\S+)$/gm)].map((m) => m[1]);
@@ -34,10 +34,17 @@ export default {
   commands: {
     view: {
       summary: t('Show owner, branches and addresses of a repo', 'Ver dueño, ramas y direcciones de un repo'),
-      usage: t('Usage: tgl repo view [--json] [-R owner/name]', 'Uso: tgl repo view [--json] [-R cuenta/nombre]'),
-      options: { ...repoOption, ...jsonOption },
+      usage: t(
+        'Usage: tgl repo view [--web] [--json] [-R owner/name]\n\n  -w, --web  Open the repo in the browser',
+        'Uso: tgl repo view [--web] [--json] [-R cuenta/nombre]\n\n  -w, --web  Abrir el repo en el navegador',
+      ),
+      options: { ...repoOption, ...jsonOption, ...webOption },
       async run(opts) {
         const { repoDid } = await resolveRepo(opts.repo);
+        if (opts.web) {
+          openInBrowser(repoWebUrl(repoDid));
+          return;
+        }
         const records = await recordsLinkingTo({ account: whoAmI(), collection: NSID.repo, links: [{ target: repoDid, path: '.repoDid' }] });
         // A rename leaves an older record behind; the newest one has the current name.
         const record = records.sort((a, b) => (b.value.createdAt ?? '').localeCompare(a.value.createdAt ?? ''))[0];
