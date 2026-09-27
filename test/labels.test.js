@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildLabelOpRecord, foldLabelOps } from '../src/labels.js';
+import { buildLabelDefinitionRecord, buildLabelOpRecord, foldLabelOps } from '../src/labels.js';
 
 const def = (name, extra = {}) => ({ uri: `at://did:plc:t/sh.tangled.label.definition/${name}`, name, ...extra });
 const bug = def('bug', { valueType: { type: 'null' } });
@@ -48,4 +48,24 @@ test('label op record', () => {
     delete: [],
     performedAt: now.toISOString(),
   });
+});
+
+test('label definitions follow the website rules', () => {
+  const now = new Date('2026-09-27T10:00:00Z');
+  assert.deepEqual(buildLabelDefinitionRecord({ name: 'bug', color: '#e1d', now }), {
+    $type: 'sh.tangled.label.definition',
+    name: 'bug',
+    valueType: { type: 'null', format: 'any' },
+    scope: ['sh.tangled.repo.issue', 'sh.tangled.repo.pull'],
+    multiple: false,
+    color: '#EE11DD',
+    createdAt: now.toISOString(),
+  });
+  const priority = buildLabelDefinitionRecord({ name: 'priority', values: ['high', 'low'], scope: 'issues', now });
+  assert.deepEqual(priority.valueType, { type: 'string', format: 'any', enum: ['high', 'low'] });
+  assert.deepEqual(priority.scope, ['sh.tangled.repo.issue']);
+  assert.equal(buildLabelDefinitionRecord({ name: 'reviewer', kind: 'person', multiple: true, now }).valueType.format, 'did');
+  for (const bad of [{ name: '-x' }, { name: 'a b' }, { name: 'x', multiple: true }, { name: 'x', color: 'red' }, { name: 'x', scope: 'all' }, { name: 'x', kind: 'person', values: ['a'] }]) {
+    assert.throws(() => buildLabelDefinitionRecord(bad), undefined, JSON.stringify(bad));
+  }
 });

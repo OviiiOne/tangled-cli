@@ -26,7 +26,7 @@ You need Node.js 20+ and git. There is nothing to install: `tgl` has no dependen
 
 ## How the code is laid out
 
-- `src/cli.js` parses the command line; each topic (`auth`, `repo`, `pr`, `issue`,
+- `src/cli.js` parses the command line; each topic (`auth`, `repo`, `pr`, `issue`, `label`,
   `release`) is one file in `src/commands/`. A new topic is a new file plus one line in
   `src/cli.js`, without touching the others.
 - `src/tangled.js` holds Tangled's record formats. They are not officially documented:

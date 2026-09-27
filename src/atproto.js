@@ -202,6 +202,11 @@ export class Session {
     return this.procedure('com.atproto.repo.putRecord', { repo: this.did, collection, rkey, record, swapRecord: cid });
   }
 
+  async deleteRecord(uri) {
+    const [, collection, rkey] = uri.replace('at://', '').split('/');
+    return this.procedure('com.atproto.repo.deleteRecord', { repo: this.did, collection, rkey });
+  }
+
   // Calls a procedure on another service (e.g. a Tangled knot) as this account, with a
   // short-lived token from the account's server that only allows that one method.
   async callService(host, nsid, body) {

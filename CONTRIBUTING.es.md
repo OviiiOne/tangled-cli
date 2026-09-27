@@ -27,7 +27,7 @@ Necesitas Node.js 20 o superior y git. No hay nada que instalar: `tgl` no tiene 
 
 ## Cómo está organizado el código
 
-- `src/cli.js` lee la línea de comandos; cada tema (`auth`, `repo`, `pr`, `issue`,
+- `src/cli.js` lee la línea de comandos; cada tema (`auth`, `repo`, `pr`, `issue`, `label`,
   `release`) es un archivo en `src/commands/`. Un tema nuevo es un archivo nuevo y una
   línea en `src/cli.js`, sin tocar los demás.
 - `src/tangled.js` tiene los formatos de registro de Tangled. No están documentados

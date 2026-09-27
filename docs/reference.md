@@ -31,6 +31,9 @@
 | `tgl issue label <issue> [--add …] [--remove …]` | Add or remove labels on an issue, or list them |
 | `tgl issue close <issue> [-b "Text"]` | Close an issue, optionally with a comment |
 | `tgl issue reopen <issue> [-b "Text"]` | Reopen an issue, optionally with a comment |
+| `tgl label list` | List the labels a repo uses |
+| `tgl label create <name> [--kind …] [--values …]` | Create a label for your repo |
+| `tgl label delete <name>` | Remove a label from your repo |
 | `tgl release upload <tag> <files…>` | Attach files (e.g. a signed build) to a tag's release |
 | `tgl release list [<tag>]` | Show the files attached to each release |
 
@@ -64,6 +67,11 @@
 - Labels: `--add good-first-issue`, or `--add assignee=alice.bsky.social` for labels that
   take a value. `--add` and `--remove` can be repeated. Only the repo's owner and
   collaborators can change labels; `label` with no options shows the repo's labels.
+- `label create` makes your own labels: `--kind simple` (no value, the default), `text`,
+  `person`, `number` or `yes-no`; `--values high,medium,low` for fixed choices;
+  `--multiple` for several values at once; `--for issues|prs|both`; `--color "#E11D48"`.
+  Only the repo's owner can create or delete labels. `label delete` also deletes a label
+  you created; Tangled's own labels are only removed from the repo.
 - `repo create` makes an empty repo (default branch `main`, host `knot1.tangled.sh`);
   `--remote tangled` also adds it as a git remote. For pipelines, pick a CI server with
   `--spindle spindle.tangled.sh` or later in the repo's settings on the website.

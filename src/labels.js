@@ -9,12 +9,17 @@ import { t } from './i18n.js';
 import { authorOf, NSID } from './tangled.js';
 
 export const LABEL_OP = 'sh.tangled.label.op';
+export const LABEL_DEFINITION = 'sh.tangled.label.definition';
 
-// The label definitions of a repo, from its newest repo record (a rename leaves an
-// older one behind). Definitions that can't be read are left out.
-export async function repoLabelDefs(account, repoDid) {
+// The repo's newest repo record (a rename leaves an older one behind).
+export async function repoRecord(account, repoDid) {
   const records = await recordsLinkingTo({ account, collection: NSID.repo, links: [{ target: repoDid, path: '.repoDid' }] });
-  const record = records.sort((a, b) => (b.value.createdAt ?? '').localeCompare(a.value.createdAt ?? ''))[0];
+  return records.sort((a, b) => (b.value.createdAt ?? '').localeCompare(a.value.createdAt ?? ''))[0];
+}
+
+// The label definitions a repo uses. Definitions that can't be read are left out.
+export async function repoLabelDefs(account, repoDid) {
+  const record = await repoRecord(account, repoDid);
   const defs = await mapLimit(record?.value.labels ?? [], 8, async (uri) => {
     const def = await getRecord(uri).catch(() => null);
     return def && { uri, ...def.value };
@@ -111,6 +116,65 @@ export async function parseLabelArg(arg, defs, subjectCollection, { removing = f
     throw new TglError(t(`Label "${def.name}" takes one of: ${def.valueType.enum.join(', ')}`, `La etiqueta "${def.name}" lleva uno de: ${def.valueType.enum.join(', ')}`));
   }
   return { def, value };
+}
+
+// Kinds of label a user can create, as the website's form offers them.
+export const LABEL_KINDS = {
+  simple: { type: 'null', format: 'any' },
+  text: { type: 'string', format: 'any' },
+  person: { type: 'string', format: 'did' },
+  number: { type: 'integer', format: 'any' },
+  'yes-no': { type: 'boolean', format: 'any' },
+};
+
+export const LABEL_SCOPES = {
+  issues: [NSID.issue],
+  prs: [NSID.pull],
+  both: [NSID.issue, NSID.pull],
+};
+
+// Mirrors LabelDefinition.Validate and AsRecord in appview/models/label.go (the
+// ingester drops definitions that fail these rules). Throws a TglError if invalid.
+export function buildLabelDefinitionRecord({ name, kind = 'simple', values = [], multiple = false, scope = 'both', color, now = new Date() }) {
+  if (!/^[a-zA-Z0-9]([a-zA-Z0-9_-]*[a-zA-Z0-9])?$/.test(name ?? '') || name.length > 40) {
+    throw new TglError(t(
+      'A label name has up to 40 letters, numbers, hyphens and underscores, and starts and ends with a letter or number.',
+      'El nombre de una etiqueta tiene hasta 40 letras, números, guiones y guiones bajos, y empieza y acaba en letra o número.',
+    ));
+  }
+  const valueType = LABEL_KINDS[values.length ? 'text' : kind];
+  if (!valueType) throw new TglError(t(`--kind must be one of: ${Object.keys(LABEL_KINDS).join(', ')}`, `--kind debe ser uno de: ${Object.keys(LABEL_KINDS).join(', ')}`));
+  if (values.length && kind !== 'simple' && kind !== 'text') {
+    throw new TglError(t('--values only goes with text labels.', '--values solo va con etiquetas de texto.'));
+  }
+  if (multiple && valueType.type === 'null') {
+    throw new TglError(t('A simple label (no value) cannot be --multiple.', 'Una etiqueta simple (sin valor) no puede ser --multiple.'));
+  }
+  if (!LABEL_SCOPES[scope]) throw new TglError(t('--for must be issues, prs or both.', '--for debe ser issues, prs o both.'));
+  let hex = color?.trim();
+  if (hex) {
+    if (/^#?[a-fA-F0-9]{3}$/.test(hex)) hex = `#${[...hex.replace('#', '')].map((c) => c + c).join('')}`;
+    if (!/^#?[a-fA-F0-9]{6}$/.test(hex)) throw new TglError(t('--color must be a hex color, e.g. #E11D48.', '--color debe ser un color hexadecimal, p. ej. #E11D48.'));
+    hex = `#${hex.replace('#', '').toUpperCase()}`;
+  }
+  const record = {
+    $type: LABEL_DEFINITION,
+    name,
+    valueType: { ...valueType, ...(values.length ? { enum: values } : {}) },
+    scope: LABEL_SCOPES[scope],
+    multiple,
+    createdAt: now.toISOString(),
+  };
+  if (hex) record.color = hex;
+  return record;
+}
+
+// A label's kind in words, for lists: "simple", "person", "text: high, low"…
+export function labelKind(def) {
+  const vt = def.valueType ?? {};
+  if (vt.enum?.length) return vt.enum.join('/');
+  const kind = Object.entries(LABEL_KINDS).find(([, k]) => k.type === vt.type && k.format === (vt.format ?? 'any'))?.[0] ?? vt.type;
+  return def.multiple ? `${kind}, ${t('several', 'varios')}` : kind;
 }
 
 export function buildLabelOpRecord({ subjectUri, add, remove, now = new Date() }) {

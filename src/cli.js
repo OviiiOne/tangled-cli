@@ -5,13 +5,14 @@ import { TglError } from './errors.js';
 import { t } from './i18n.js';
 import auth from './commands/auth.js';
 import issue from './commands/issue.js';
+import label from './commands/label.js';
 import pr from './commands/pr.js';
 import release from './commands/release.js';
 import repo from './commands/repo.js';
 
 // Each topic is a self-contained module: { name, summary, commands }.
 // Adding a topic means adding one file and one line here.
-const TOPICS = [auth, repo, pr, issue, release];
+const TOPICS = [auth, repo, pr, issue, label, release];
 
 const VERSION = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
 

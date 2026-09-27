@@ -31,6 +31,9 @@
 | `tgl issue label <issue> [--add …] [--remove …]` | Poner o quitar etiquetas a una issue, o verlas |
 | `tgl issue close <issue> [-b "Texto"]` | Cerrar una issue, con un comentario opcional |
 | `tgl issue reopen <issue> [-b "Texto"]` | Volver a abrir una issue, con un comentario opcional |
+| `tgl label list` | Ver las etiquetas que usa un repo |
+| `tgl label create <nombre> [--kind …] [--values …]` | Crear una etiqueta para tu repo |
+| `tgl label delete <nombre>` | Quitar una etiqueta de tu repo |
 | `tgl release upload <etiqueta> <archivos…>` | Adjuntar archivos (por ejemplo un .xpi firmado) a la versión de una etiqueta |
 | `tgl release list [<etiqueta>]` | Ver los archivos subidos a cada versión |
 
@@ -63,6 +66,11 @@
 - Etiquetas: `--add good-first-issue`, o `--add assignee=alice.bsky.social` en las que
   llevan valor. `--add` y `--remove` se pueden repetir. Solo el dueño del repo y sus
   colaboradores pueden cambiarlas; `label` sin opciones muestra las etiquetas del repo.
+- `label create` crea tus propias etiquetas: `--kind simple` (sin valor, por defecto),
+  `text`, `person`, `number` o `yes-no`; `--values alta,media,baja` para opciones fijas;
+  `--multiple` para varios valores a la vez; `--for issues|prs|both`; `--color "#E11D48"`.
+  Solo el dueño del repo puede crear o quitar etiquetas. `label delete` también borra una
+  etiqueta que creaste tú; las de Tangled solo se quitan del repo.
 - `repo create` crea un repo vacío (rama principal `main`, servidor `knot1.tangled.sh`);
   `--remote tangled` además lo añade como remoto git. Para las pipelines, elige un servidor
   de CI con `--spindle spindle.tangled.sh` o luego en los ajustes del repo en la web.
