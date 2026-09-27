@@ -1,6 +1,6 @@
 {
   "name": "tangled-cli",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "tgl: manage Tangled (tangled.org) from the terminal",
   "license": "MIT",
   "private": true,
