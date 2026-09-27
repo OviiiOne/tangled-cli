@@ -158,6 +158,13 @@ export class Session {
           'La cuenta o la contraseña de aplicación no son correctas. Vuelve a ejecutar "tgl auth login".',
         ));
       }
+      // Each command that writes logs in once; servers cap logins per account.
+      if (err.status === 429) {
+        throw new TglError(t(
+          'Your account\'s server refused the login: too many in a short time. Wait a few minutes and try again.',
+          'El servidor de tu cuenta ha rechazado el inicio de sesión: demasiados en poco tiempo. Espera unos minutos y vuelve a probar.',
+        ));
+      }
       throw err;
     }
   }
