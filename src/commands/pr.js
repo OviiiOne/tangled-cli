@@ -4,7 +4,7 @@ import { TglError } from '../errors.js';
 import {
   branchName, currentBranch, formatPatch, git, isWorkingTreeClean, localRefFor, refExists, remoteDefaultBranch, unpushedCommits,
 } from '../git.js';
-import { t } from '../i18n.js';
+import { t, textLanguage } from '../i18n.js';
 import { expandNumber, findById, isIdOf, loadItems, notFound, repoPeople } from '../repoData.js';
 import {
   buildCommentRecord, buildIssueStateRecord, buildPullRecord, buildStatusRecord, closingRefs, isFork, NSID, pullPatch, repoGitUrl,
@@ -88,8 +88,10 @@ async function closeLinkedIssues(session, pull, repoDid) {
         console.log(t(`Issue ${label} not closed: only its author or the repo's owner can close it.`, `La issue ${label} no se ha cerrado: solo puede cerrarla quien la creó o el dueño del repo.`));
         continue;
       }
-      // A public comment: in English whatever the user's language, like the rest of a repo.
-      const body = `Closed by the merged PR "${pull.title}".`;
+      // A public comment: in the issue's language, not the user's.
+      const body = textLanguage(`${issue.title}\n${issue.body ?? ''}`) === 'es'
+        ? `Cerrada por la PR fusionada "${pull.title}".`
+        : `Closed by the merged PR "${pull.title}".`;
       await session.createRecord(NSID.comment, buildCommentRecord({ subject: issue, body }));
       await session.createRecord(NSID.issueState, buildIssueStateRecord({ issueUri: issue.uri, state: 'closed' }));
       console.log(t(`Issue ${label} "${issue.title}" closed.`, `Issue ${label} "${issue.title}" cerrada.`));
