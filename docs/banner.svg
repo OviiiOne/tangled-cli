@@ -1,5 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" style="font-variant-ligatures:none" width="880" height="400" viewBox="0 0 880 400" font-family="ui-monospace, 'Cascadia Code', Menlo, Consolas, monospace">
-  <rect width="880" height="400" rx="12" fill="#1b1d23"/>
+<svg xmlns="http://www.w3.org/2000/svg" style="font-variant-ligatures:none" width="880" height="424" viewBox="0 0 880 424" font-family="ui-monospace, 'Cascadia Code', Menlo, Consolas, monospace">
+  <rect width="880" height="424" rx="12" fill="#1b1d23"/>
   <path d="M12 0h856a12 12 0 0 1 12 12v24H0V12A12 12 0 0 1 12 0z" fill="#2a2d35"/>
   <circle cx="22" cy="18" r="6" fill="#ff5f57"/><circle cx="42" cy="18" r="6" fill="#febc2e"/><circle cx="62" cy="18" r="6" fill="#28c840"/>
   <text x="48" y="124" font-size="72" font-weight="700"><tspan fill="#6ee7a8">$</tspan><tspan fill="#f2f2f2"> tgl</tspan></text>
@@ -10,7 +10,8 @@
     <text x="40" y="242"><tspan fill="#6ee7a8">$</tspan><tspan fill="#f2f2f2"> tgl pr list</tspan></text>
     <text y="274" fill="#c9ccd3"><tspan x="40">3mfq2kx7abcd2</tspan><tspan x="170" fill="#6ee7a8">open</tspan><tspan x="228">2026-09-27</tspan><tspan x="330">feat/issues -&gt; master</tspan><tspan x="530">Add issue commands</tspan></text>
     <text y="298" fill="#c9ccd3"><tspan x="40">3mfp8wz4efgh5</tspan><tspan x="170" fill="#6ee7a8">open</tspan><tspan x="228">2026-09-26</tspan><tspan x="330">fix/branch -&gt; master</tspan><tspan x="530">Detect default branch</tspan></text>
-    <text x="40" y="338"><tspan fill="#6ee7a8">$</tspan><tspan fill="#f2f2f2"> tgl pr close 3mfp8wz4efgh5 --merged</tspan></text>
+    <text x="40" y="338"><tspan fill="#6ee7a8">$</tspan><tspan fill="#f2f2f2"> tgl pr close --merged</tspan></text>
     <text x="40" y="370" fill="#c9ccd3">PR "Detect default branch" marked as merged.</text>
+    <text x="40" y="394" fill="#c9ccd3">Issue #7 "Wrong default branch on new repos" <tspan fill="#6ee7a8">closed</tspan>.</text>
   </g>
 </svg>

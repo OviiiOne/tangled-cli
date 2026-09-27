@@ -2,7 +2,7 @@
 
 [English](README.md)
 
-![tgl en una terminal: lista PRs y marca una como fusionada](docs/banner.svg)
+![tgl en una terminal: lista PRs, y al marcar una como fusionada cierra su issue](docs/banner.svg)
 
 Herramienta de terminal para [Tangled](https://tangled.org), al estilo de `gh` para GitHub.
 

@@ -2,7 +2,7 @@
 
 [Español](README.es.md)
 
-![tgl in a terminal: listing PRs and marking one as merged](docs/banner.svg)
+![tgl in a terminal: listing PRs, and marking one as merged closes its issue](docs/banner.svg)
 
 A command-line tool for [Tangled](https://tangled.org), in the style of GitHub's `gh`.
 
