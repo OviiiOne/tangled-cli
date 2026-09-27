@@ -199,7 +199,7 @@ export default {
         console.log(t(`Address: ${uri}`, `Dirección: ${uri}`));
         console.log(t(
           `See it at: ${repoWebUrl(repoDid)}/pulls (Tangled may take a few seconds to show it)`,
-          `Véla en: ${repoWebUrl(repoDid)}/pulls (Tangled puede tardar unos segundos en mostrarla)`,
+          `Mírala en: ${repoWebUrl(repoDid)}/pulls (Tangled puede tardar unos segundos en mostrarla)`,
         ));
       },
     },

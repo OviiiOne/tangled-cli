@@ -59,7 +59,7 @@ export default {
         console.log(t(`Issue created in ${label}. Id: ${uri.split('/').pop()}`, `Issue creada en ${label}. Id: ${uri.split('/').pop()}`));
         console.log(t(
           `See it at: ${repoWebUrl(repoDid)}/issues (Tangled may take a few seconds to show it)`,
-          `Véla en: ${repoWebUrl(repoDid)}/issues (Tangled puede tardar unos segundos en mostrarla)`,
+          `Mírala en: ${repoWebUrl(repoDid)}/issues (Tangled puede tardar unos segundos en mostrarla)`,
         ));
       },
     },
