@@ -1,0 +1,18 @@
+# Runs the unit tests on every push to master and every PR into it.
+# Spindle docs: https://tangled.org/tangled.org/core/blob/master/docs/DOCS.md#spindles
+when:
+  - event: ["push", "pull_request"]
+    branch: ["master"]
+  - event: ["manual"]
+
+engine: microvm
+image: nixos
+
+dependencies:
+  - nodejs_22
+
+steps:
+  - name: "Unit tests (Node 22)"
+    command: |
+      node --version
+      npm test
