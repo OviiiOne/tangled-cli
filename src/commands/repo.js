@@ -4,12 +4,28 @@ import { whoAmI } from '../credentials.js';
 import { TglError } from '../errors.js';
 import { git, remoteDefaultBranch } from '../git.js';
 import { t } from '../i18n.js';
-import { authorOf, knotOf, NSID, repoGitUrl, repoWebUrl, resolveRepo } from '../tangled.js';
+import {
+  authorOf, buildRepoRecord, DEFAULT_KNOT, knotOf, NSID, repoGitUrl, repoNameProblem, repoWebUrl, resolveRepo,
+} from '../tangled.js';
 import { openSession } from './auth.js';
 import { jsonOption, printJson, repoOption } from './shared.js';
 
 function remoteBranches(url) {
   return [...git(['ls-remote', '--heads', url]).matchAll(/\trefs\/heads\/(\S+)$/gm)].map((m) => m[1]);
+}
+
+function remoteNames() {
+  return git(['remote']).split('\n').filter(Boolean);
+}
+
+async function ownRecordExists(session, uri) {
+  try {
+    await session.getOwnRecord(uri);
+    return true;
+  } catch (err) {
+    if (err.xrpcError === 'RecordNotFound' || err.status === 404) return false;
+    throw err;
+  }
 }
 
 export default {
@@ -49,6 +65,78 @@ export default {
         console.log(`Web: ${info.web}`);
         console.log(`Git (HTTPS): ${info.gitHttps}`);
         console.log(`Git (SSH): ${info.gitSsh}`);
+      },
+    },
+    create: {
+      summary: t('Create a new repository on Tangled', 'Crear un repositorio nuevo en Tangled'),
+      usage: t([
+        'Usage: tgl repo create <name> [--description <text>] [--branch <name>] [--knot <host>]',
+        '                       [--spindle <host>] [--remote <name>]',
+        '',
+        '  -d, --description  Short description (up to 140 characters)',
+        '  -b, --branch       Default branch (default: main)',
+        `      --knot         Git server to host it on (default: ${DEFAULT_KNOT})`,
+        '      --spindle      CI server for its pipelines, e.g. spindle.tangled.sh (default: none)',
+        '      --remote       Also add it as a git remote with this name to the current git repo',
+        '',
+        'The repo starts empty: push to it afterwards.',
+      ], [
+        'Uso: tgl repo create <nombre> [--description <texto>] [--branch <nombre>] [--knot <servidor>]',
+        '                     [--spindle <servidor>] [--remote <nombre>]',
+        '',
+        '  -d, --description  Descripción corta (hasta 140 caracteres)',
+        '  -b, --branch       Rama principal (por defecto, main)',
+        `      --knot         Servidor git donde alojarlo (por defecto, ${DEFAULT_KNOT})`,
+        '      --spindle      Servidor de CI para sus pipelines, p. ej. spindle.tangled.sh (por defecto, ninguno)',
+        '      --remote       Añadirlo también como remoto git con este nombre al repo git actual',
+        '',
+        'El repo nace vacío: súbele código después.',
+      ]).join('\n'),
+      options: {
+        description: { type: 'string', short: 'd' },
+        branch: { type: 'string', short: 'b', default: 'main' },
+        knot: { type: 'string', default: DEFAULT_KNOT },
+        spindle: { type: 'string' },
+        remote: { type: 'string' },
+      },
+      async run(opts, [rawName]) {
+        const name = rawName?.replace(/\.git$/, '');
+        const problem = repoNameProblem(name);
+        if (problem) throw new TglError(problem);
+        if (opts.description && [...opts.description].length > 140) {
+          throw new TglError(t('The description must be 140 characters or fewer.', 'La descripción no puede pasar de 140 caracteres.'));
+        }
+        if (opts.remote && remoteNames().includes(opts.remote)) {
+          throw new TglError(t(`This git repo already has a remote called "${opts.remote}".`, `Este repo git ya tiene un remoto llamado "${opts.remote}".`));
+        }
+        const rkey = name.toLowerCase();
+        const session = await openSession();
+        const uri = `at://${session.did}/${NSID.repo}/${rkey}`;
+        if (await ownRecordExists(session, uri)) {
+          throw new TglError(t(`You already have a repository called "${rkey}" (or an old record of a renamed one).`, `Ya tienes un repositorio llamado "${rkey}" (o el registro antiguo de uno renombrado).`));
+        }
+        // As the website does: the knot creates the git repo and its DID, then the
+        // record on the user's account announces it to Tangled.
+        const knot = opts.knot.replace(/^https?:\/\//, '').replace(/\/$/, '');
+        const { repoDid } = await session.callService(`https://${knot}`, 'sh.tangled.repo.create', { rkey, name: rkey, defaultBranch: opts.branch });
+        if (!repoDid) throw new TglError(t(`The knot ${knot} did not return the new repo's DID.`, `El knot ${knot} no ha devuelto el DID del repo nuevo.`));
+        try {
+          await session.createRecord(NSID.repo, buildRepoRecord({ name, knot, repoDid, description: opts.description, spindle: opts.spindle }), { rkey });
+        } catch (err) {
+          await session.callService(`https://${knot}`, 'sh.tangled.repo.delete', { repo: repoDid, did: session.did, name: rkey, rkey }).catch(() => {});
+          throw err;
+        }
+        const ssh = `git@tangled.org:${repoDid}`;
+        console.log(t(`Repository ${session.handle}/${name} created.`, `Repositorio ${session.handle}/${name} creado.`));
+        console.log(`DID: ${repoDid}`);
+        console.log(`Web: ${repoWebUrl(repoDid)}`);
+        console.log(`Git (SSH): ${ssh}`);
+        if (opts.remote) {
+          git(['remote', 'add', opts.remote, ssh]);
+          console.log(t(`Remote "${opts.remote}" added. Push with: git push -u ${opts.remote} ${opts.branch}`, `Remoto "${opts.remote}" añadido. Sube con: git push -u ${opts.remote} ${opts.branch}`));
+        } else {
+          console.log(t(`To push an existing repo: git remote add tangled ${ssh} && git push -u tangled ${opts.branch}`, `Para subir un repo que ya tienes: git remote add tangled ${ssh} && git push -u tangled ${opts.branch}`));
+        }
       },
     },
     'set-default-branch': {

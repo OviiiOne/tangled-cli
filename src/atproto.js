@@ -176,8 +176,8 @@ export class Session {
     return data.blob;
   }
 
-  async createRecord(collection, record) {
-    return this.procedure('com.atproto.repo.createRecord', { repo: this.did, collection, record });
+  async createRecord(collection, record, { rkey } = {}) {
+    return this.procedure('com.atproto.repo.createRecord', { repo: this.did, collection, record, ...(rkey ? { rkey } : {}) });
   }
 
   // One of this account's records, read from its own server (never a cache) so an
