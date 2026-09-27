@@ -112,7 +112,7 @@ export default {
         }
         console.log(t(
           `\nSee it at: ${repoWebUrl(repoDid)}/tags (Tangled may take a few seconds to show it)`,
-          `\nVéla en: ${repoWebUrl(repoDid)}/tags (Tangled puede tardar unos segundos en mostrarla)`,
+          `\nMírala en:${repoWebUrl(repoDid)}/tags (Tangled puede tardar unos segundos en mostrarla)`,
         ));
       },
     },

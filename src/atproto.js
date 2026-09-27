@@ -180,6 +180,21 @@ export class Session {
     return this.procedure('com.atproto.repo.createRecord', { repo: this.did, collection, record });
   }
 
+  // One of this account's records, read from its own server (never a cache) so an
+  // edit starts from the latest version.
+  async getOwnRecord(uri) {
+    const [, collection, rkey] = uri.replace('at://', '').split('/');
+    const data = await xrpcQuery(this.pds, 'com.atproto.repo.getRecord', { repo: this.did, collection, rkey });
+    return { uri, cid: data.cid, value: data.value };
+  }
+
+  // Replaces a record only if it is still the version read (`swapRecord` = its cid),
+  // so a change made meanwhile elsewhere is never overwritten.
+  async putRecord({ uri, cid }, record) {
+    const [, collection, rkey] = uri.replace('at://', '').split('/');
+    return this.procedure('com.atproto.repo.putRecord', { repo: this.did, collection, rkey, record, swapRecord: cid });
+  }
+
   // Calls a procedure on another service (e.g. a Tangled knot) as this account, with a
   // short-lived token from the account's server that only allows that one method.
   async callService(host, nsid, body) {

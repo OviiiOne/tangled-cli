@@ -3,7 +3,9 @@ import { handleOf, mapLimit } from './atproto.js';
 import { linkedRecordBatches, recordsLinkingTo } from './backlinks.js';
 import { TglError } from './errors.js';
 import { t } from './i18n.js';
-import { authorOf, ISSUE_STATES, latestState, NSID, PULL_STATES, TANGLED_DID } from './tangled.js';
+import {
+  authorOf, ISSUE_STATES, latestState, NSID, parseNumber, PULL_STATES, TANGLED_DID, uriForNumber,
+} from './tangled.js';
 
 // How each kind of record points at its repo, newest format first:
 // "did" = the repo DID, "uri" = an at:// address of one of the repo's records.
@@ -84,15 +86,26 @@ export function isIdOf(ref, uri) {
   return uri === ref || uri.split('/').pop() === ref;
 }
 
-// Finds one item by its id (the last part of its address) or its full at:// address.
+// A website number ("#12") becomes the item's at:// address; other refs are kept.
+export async function expandNumber(kind, repoDid, ref) {
+  const number = parseNumber(ref);
+  if (number === undefined) return ref;
+  const uri = await uriForNumber(repoDid, kind, number);
+  if (!uri) throw notFound(kind, `#${number}`);
+  return uri;
+}
+
+// Finds one item by its id (the last part of its address), its full at:// address,
+// or its number on the website ("#12").
 export async function findById(kind, account, repoDid, ref) {
-  const [found] = await loadItems(kind, account, repoDid, { limit: 1, match: (uri) => isIdOf(ref, uri) });
+  const wanted = await expandNumber(kind, repoDid, ref);
+  const [found] = await loadItems(kind, account, repoDid, { limit: 1, match: (uri) => isIdOf(wanted, uri) });
   if (found) return found;
   throw notFound(kind, ref);
 }
 
 export function notFound(kind, ref) {
   return new TglError(kind === 'pull'
-    ? t(`No PR "${ref}" in this repository. See the ids with "tgl pr list".`, `No encuentro ninguna PR "${ref}" en este repositorio. Mira los ids con "tgl pr list".`)
-    : t(`No issue "${ref}" in this repository. See the ids with "tgl issue list".`, `No encuentro ninguna issue "${ref}" en este repositorio. Mira los ids con "tgl issue list".`));
+    ? t(`No PR "${ref}" in this repository. See them with "tgl pr list".`, `No encuentro ninguna PR "${ref}" en este repositorio. Míralas con "tgl pr list".`)
+    : t(`No issue "${ref}" in this repository. See them with "tgl issue list".`, `No encuentro ninguna issue "${ref}" en este repositorio. Míralas con "tgl issue list".`));
 }

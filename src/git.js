@@ -66,6 +66,18 @@ export function remoteDefaultBranch(url) {
   return ['main', 'master'].find((b) => heads.includes(b));
 }
 
+// Commits of a local branch that a remote repository doesn't have yet: 0 when the
+// remote branch is the same or ahead, null when the remote has no such branch.
+// `localRef` is what to compare (default: the local branch of that name).
+export function unpushedCommits(url, branch, localRef = branch) {
+  const line = git(['ls-remote', '--heads', url, `refs/heads/${branch}`]).trim();
+  if (!line) return null;
+  const remoteHash = line.split('\t')[0];
+  // A remote commit we don't have: count everything, it can't be compared.
+  if (!refExists(remoteHash)) return Number(git(['rev-list', '--count', localRef]).trim());
+  return Number(git(['rev-list', '--count', `${remoteHash}..${localRef}`]).trim());
+}
+
 // Hash of an annotated tag object: what Tangled attaches release files to.
 export function annotatedTagHash(tag) {
   if (!refExists(`refs/tags/${tag}`)) {
