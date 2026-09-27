@@ -1,17 +1,39 @@
 {
   "name": "tangled-cli",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "tgl: manage Tangled (tangled.org) from the terminal",
   "license": "MIT",
-  "private": true,
   "type": "module",
   "bin": {
     "tgl": "bin/tgl.js"
   },
+  "files": [
+    "bin/",
+    "src/",
+    "docs/",
+    "README.es.md",
+    "CONTRIBUTING.md",
+    "CONTRIBUTING.es.md"
+  ],
   "engines": {
     "node": ">=20"
   },
   "scripts": {
     "test": "node --test"
+  },
+  "keywords": [
+    "tangled",
+    "atproto",
+    "git",
+    "cli",
+    "pull-request"
+  ],
+  "homepage": "https://tangled.org/did:plc:e6a2dywiq22fgtsjrujrkift",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/OviiiOne/tangled-cli.git"
+  },
+  "bugs": {
+    "url": "https://tangled.org/did:plc:e6a2dywiq22fgtsjrujrkift/issues"
   }
 }

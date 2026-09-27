@@ -129,13 +129,27 @@ export function saveLogin({ handle, did, pds, password }) {
   writeFileSync(loginFile(), JSON.stringify(data, null, 2), { mode: 0o600 });
 }
 
+// A login given in environment variables (TGL_ACCOUNT, TGL_APP_PASSWORD), for CI
+// pipelines where the app password is a secret of the pipeline. It replaces the saved
+// login for this run and is never written anywhere.
+let envLogin = null;
+
+export function useEnvLogin(login) {
+  envLogin = { ...login, store: 'env' };
+}
+
 export function loadLogin() {
+  if (envLogin) return envLogin;
   if (!existsSync(loginFile())) throw notLoggedIn();
   const data = JSON.parse(readFileSync(loginFile(), 'utf8'));
   return { ...data, password: storeFor(data.password.scheme).load(data.did, data.password.value) };
 }
 
 export function readLoginInfo() {
+  if (envLogin) {
+    const { password, ...info } = envLogin;
+    return info;
+  }
   if (!existsSync(loginFile())) return null;
   const { handle, did, pds, savedAt, password } = JSON.parse(readFileSync(loginFile(), 'utf8'));
   return { handle, did, pds, savedAt, store: password.scheme, file: loginFile() };

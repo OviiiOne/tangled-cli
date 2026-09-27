@@ -204,6 +204,36 @@ export function tagHashFromRecord(record) {
   return Buffer.from(record.tag.$bytes, 'base64').toString('hex');
 }
 
+// Labels a new repo starts with on Tangled's website (LABEL_DEFAULTS in appview/config).
+export const DEFAULT_LABELS = ['wontfix', 'good-first-issue', 'duplicate', 'documentation', 'assignee']
+  .map((name) => `at://${TANGLED_DID}/sh.tangled.label.definition/${name}`);
+
+export const DEFAULT_KNOT = 'knot1.tangled.sh';
+
+// Same rules as ValidateRepoName in appview/models/repo.go. Returns an error message or null.
+export function repoNameProblem(name) {
+  if (!name) return t('The repository name cannot be empty.', 'El nombre del repositorio no puede estar vacío.');
+  if (name.length > 100) return t('The name must be 100 characters or fewer.', 'El nombre no puede pasar de 100 caracteres.');
+  if (!/^[A-Za-z0-9._-]+$/.test(name)) {
+    return t('The name can only have letters, numbers, dots, hyphens and underscores.', 'El nombre solo puede tener letras, números, puntos, guiones y guiones bajos.');
+  }
+  if (name.startsWith('.') || name.endsWith('.') || name.includes('..')) {
+    return t('The name cannot start or end with a dot, or have two dots in a row.', 'El nombre no puede empezar ni acabar en punto, ni tener dos puntos seguidos.');
+  }
+  return null;
+}
+
+// Mirrors Repo.AsRecord in appview/models/repo.go, as written by the new-repo form
+// (appview/state/state.go): the record key is the lowercase name, and "name" only
+// appears when it differs from it.
+export function buildRepoRecord({ name, knot, repoDid, description, spindle, now = new Date() }) {
+  const record = { $type: NSID.repo, knot, labels: DEFAULT_LABELS, repoDid, createdAt: now.toISOString() };
+  if (name !== name.toLowerCase()) record.name = name;
+  if (description) record.description = description;
+  if (spindle) record.spindle = spindle;
+  return record;
+}
+
 export function buildStatusRecord({ pullUri, state, now = new Date() }) {
   return { $type: NSID.pullStatus, pull: pullUri, status: PULL_STATES[state], createdAt: now.toISOString() };
 }

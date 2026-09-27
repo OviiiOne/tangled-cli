@@ -7,7 +7,7 @@ Session state lives in `.claude/state.md` (local only, gitignored).
 - Typical workflow: a repo mirrored on GitHub and Tangled, where each finished branch gets
   a PR on both. Merging happens locally and reaches both forges in one push, so `tgl`
   creates, lists and closes (or marks as merged) PRs. It doesn't merge.
-- Topics: `auth`, `repo`, `pr`, `issue`, `release` (files attached to an annotated tag).
+- Topics: `auth`, `repo`, `pr`, `issue`, `label`, `release` (files attached to an annotated tag).
 - Built for the public, not only this project's owner: any repo, default branch, OS or language.
 
 ## Design

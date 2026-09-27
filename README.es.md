@@ -8,8 +8,8 @@ Herramienta de terminal para [Tangled](https://tangled.org), al estilo de `gh` p
 
 ## Para qué sirve
 
-Maneja un repositorio de Tangled sin salir de la terminal: pull requests, issues y archivos
-de versión. Además hace algunas cosas que Tangled todavía no hace por sí solo:
+Maneja Tangled sin salir de la terminal: crea repos, y abre, etiqueta, fusiona y cierra pull
+requests e issues; adjunta archivos de versión. Además hace algunas cosas que Tangled todavía no hace por sí solo:
 
 - **Cerrar issues desde una PR.** Escribe `Fixes #12` en la PR; al marcarla como fusionada,
   la issue #12 se cierra con un comentario que nombra la PR.
@@ -20,21 +20,27 @@ de versión. Además hace algunas cosas que Tangled todavía no hace por sí sol
 - **Trabajar desde la rama en la que estás:** `tgl pr view`, `tgl pr close --merged`… sin
   número de PR, o con el `#12` que muestra la web.
 
-Encaja con repos duplicados en GitHub y Tangled: abres la PR en los dos, fusionas en local,
-subes una vez y marcas la PR de Tangled como fusionada con `tgl`.
+Fusiona PRs en Tangled con `tgl pr merge` o, en repos duplicados en GitHub y Tangled: abre
+la PR en los dos, fusiona en local, sube una vez y marca la PR de Tangled como fusionada con
+`tgl pr close --merged`.
 
 Sin dependencias de terceros: solo Node.js 20 o superior y git. Licencia MIT.
 
 ## Instalación
 
 ```bash
+npm install -g tangled-cli
+```
+
+Esto instala el comando `tgl`. Compruébalo con `tgl --version`.
+
+Desde el código, para probar cambios aún no publicados:
+
+```bash
 git clone https://tangled.org/did:plc:e6a2dywiq22fgtsjrujrkift tangled-cli
 cd tangled-cli
 npm link
 ```
-
-`npm link` deja el comando `tgl` disponible en cualquier terminal. Compruébalo con
-`tgl --version`.
 
 ## Iniciar sesión
 
@@ -63,7 +69,8 @@ están en la [referencia](docs/reference.es.md).
 
 ## Repositorios
 
-El mismo código está en las dos forjas; en cualquiera se pueden abrir issues y PRs.
+El mismo código está en las dos forjas; en cualquiera se pueden abrir issues y PRs. Mira
+[cómo contribuir](CONTRIBUTING.es.md).
 
 - Tangled: https://tangled.org/did:plc:e6a2dywiq22fgtsjrujrkift
 - GitHub (espejo): https://github.com/OviiiOne/tangled-cli

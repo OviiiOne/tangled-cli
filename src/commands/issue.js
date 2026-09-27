@@ -1,14 +1,17 @@
+import { mapLimit } from '../atproto.js';
+import { recordsLinkingTo } from '../backlinks.js';
 import { whoAmI } from '../credentials.js';
 import { TglError } from '../errors.js';
 import { t } from '../i18n.js';
-import { findById, loadItems } from '../repoData.js';
+import { buildLabelOpRecord, formatLabels, LABEL_OP, labelsOf, repoLabelDefs } from '../labels.js';
+import { findById, loadItems, repoPeople } from '../repoData.js';
 import {
-  buildCommentRecord, buildIssueRecord, buildIssueStateRecord, NSID, repoWebUrl, resolveRepo,
+  buildCommentRecord, buildIssueRecord, buildIssueStateRecord, commentText, NSID, repoWebUrl, resolveRepo,
 } from '../tangled.js';
 import { openSession } from './auth.js';
 import {
-  bodyOptions, checkState, day, editTitleBody, jsonOption, limitOption, loadComments, openInBrowser, parseLimit, parseWebRef,
-  printComments, printJson, readBody, repoOption, webOption,
+  bodyOptions, checkState, day, editTitleBody, itemLabels, jsonOption, labelCommand, limitOption, loadComments, openInBrowser,
+  parseLimit, parseWebRef, printComments, printJson, readBody, repoOption, webOption,
 } from './shared.js';
 
 const STATE_WORDS = { open: () => t('open', 'abierta'), closed: () => t('closed', 'cerrada') };
@@ -17,6 +20,62 @@ async function findIssue(opts, ref) {
   if (!ref) throw new TglError(t('Say which issue: its #number or id (tgl issue list).', 'Indica la issue: su #número o su id (tgl issue list).'));
   const { repoDid } = await resolveRepo(opts.repo);
   return findById('issue', whoAmI(), repoDid, ref);
+}
+
+// Newest activity on an issue: itself, its comments (current and old format) and its
+// state changes. Label changes and the stale comment itself don't count, or marking it
+// stale would reset it.
+async function lastActivity(issue, staleComment) {
+  const links = (collection, path) => recordsLinkingTo({ account: whoAmI(), collection, links: [{ target: issue.uri, path }] });
+  const records = (await Promise.all([
+    links(NSID.comment, '.subject.uri'), links(NSID.legacyIssueComment, '.issue'), links(NSID.issueState, '.issue'),
+  ])).flat().filter((r) => !staleComment || commentText(r.value).trim() !== staleComment.trim());
+  return [issue.createdAt, ...records.map((r) => r.value.createdAt ?? '')].reduce((a, b) => (b > a ? b : a), '');
+}
+
+async function markStale(opts) {
+  const days = Number(opts.days);
+  if (!Number.isInteger(days) || days < 0) throw new TglError(t('--days must be a whole number of days.', '--days debe ser un número entero de días.'));
+  const { repoDid, label } = await resolveRepo(opts.repo);
+  const defs = await repoLabelDefs(whoAmI(), repoDid);
+  const def = defs.find((d) => d.name.toLowerCase() === opts.label.toLowerCase());
+  if (!def) {
+    throw new TglError(t(`${label} has no label "${opts.label}". Create it first: tgl label create ${opts.label} --for issues`, `${label} no tiene la etiqueta "${opts.label}". Créala antes: tgl label create ${opts.label} --for issues`));
+  }
+  if (def.valueType?.type !== 'null') throw new TglError(t(`"${def.name}" takes a value; use a simple label.`, `"${def.name}" lleva valor; usa una etiqueta simple.`));
+  const { editors } = await repoPeople(whoAmI(), repoDid);
+  const cutoff = new Date(Date.now() - days * 86_400_000).toISOString();
+  const issues = await loadItems('issue', whoAmI(), repoDid, { state: 'open' });
+  const checked = await mapLimit(issues, 8, async (issue) => ({
+    issue,
+    active: (await lastActivity(issue, opts.comment)) > cutoff,
+    labelled: (await labelsOf(whoAmI(), issue.uri, defs, editors)).some((l) => l.uri === def.uri),
+  }));
+  const toMark = checked.filter((c) => !c.active && !c.labelled).map((c) => c.issue);
+  const toClear = checked.filter((c) => c.active && c.labelled).map((c) => c.issue);
+  console.log(t(
+    `${issues.length} open issues in ${label}; ${toMark.length} to mark "${def.name}", ${toClear.length} active again.`,
+    `${issues.length} issues abiertas en ${label}; ${toMark.length} para marcar "${def.name}", ${toClear.length} con actividad de nuevo.`,
+  ));
+  for (const i of toMark) console.log(`  + ${i.title}`);
+  for (const i of toClear) console.log(`  - ${i.title}`);
+  if (opts['dry-run'] || (!toMark.length && !toClear.length)) {
+    if (opts['dry-run']) console.log(t('Nothing was changed (--dry-run).', 'No se ha cambiado nada (--dry-run).'));
+    return;
+  }
+  const session = await openSession();
+  if (!editors.includes(session.did)) {
+    throw new TglError(t("Only the repo's owner and collaborators can label issues.", 'Solo el dueño del repo y sus colaboradores pueden etiquetar issues.'));
+  }
+  const operand = [{ key: def.uri, value: 'null' }];
+  for (const issue of toMark) {
+    await session.createRecord(LABEL_OP, buildLabelOpRecord({ subjectUri: issue.uri, add: operand, remove: [] }));
+    if (opts.comment?.trim()) await session.createRecord(NSID.comment, buildCommentRecord({ subject: issue, body: opts.comment }));
+  }
+  for (const issue of toClear) {
+    await session.createRecord(LABEL_OP, buildLabelOpRecord({ subjectUri: issue.uri, add: [], remove: operand }));
+  }
+  console.log(t('Done.', 'Hecho.'));
 }
 
 async function setIssueState(opts, ref, state) {
@@ -41,7 +100,7 @@ const commentOnChange = () => t(
 
 export default {
   name: 'issue',
-  summary: t('Create, view, edit, comment on and close issues', 'Crear, ver, editar, comentar y cerrar issues'),
+  summary: t('Create, view, edit, label, comment on and close issues', 'Crear, ver, editar, etiquetar, comentar y cerrar issues'),
   commands: {
     create: {
       summary: t('Open an issue', 'Abrir una issue'),
@@ -108,13 +167,17 @@ export default {
           return;
         }
         const issue = await findIssue(opts, ref);
-        const comments = await loadComments(whoAmI(), issue.uri, { collection: NSID.legacyIssueComment, path: '.issue' });
+        const [comments, labels] = await Promise.all([
+          loadComments(whoAmI(), issue.uri, { collection: NSID.legacyIssueComment, path: '.issue' }),
+          itemLabels((await resolveRepo(opts.repo)).repoDid, issue),
+        ]);
         if (opts.json) {
-          printJson({ id: issue.rkey, ...issue, comments });
+          printJson({ id: issue.rkey, ...issue, labels: labels.map(({ raw, ...l }) => l), comments });
           return;
         }
         console.log(issue.title);
         console.log(`${issue.state} · ${issue.authorHandle} · ${day(issue.createdAt)}`);
+        if (labels.length) console.log(`${t('Labels', 'Etiquetas')}: ${formatLabels(labels)}`);
         if (issue.body) console.log(`\n${issue.body}`);
         printComments(comments);
       },
@@ -153,6 +216,44 @@ export default {
         await session.createRecord(NSID.comment, buildCommentRecord({ subject: issue, body }));
         console.log(t(`Comment posted on "${issue.title}".`, `Comentario publicado en "${issue.title}".`));
       },
+    },
+    label: labelCommand('issue', findIssue),
+    stale: {
+      summary: t('Label open issues with no recent activity (e.g. from a scheduled pipeline)', 'Etiquetar las issues abiertas sin actividad reciente (p. ej. desde una pipeline programada)'),
+      usage: t([
+        'Usage: tgl issue stale [--days N] [--label <name>] [--comment <text>] [--dry-run] [-R owner/name]',
+        '',
+        '  -d, --days     Days without activity before an issue is stale (default: 60)',
+        '  -l, --label    Label to put on stale issues (default: stale)',
+        '      --comment  Also post this comment when an issue becomes stale',
+        '      --dry-run  Only show what would change',
+        '',
+        'Activity is the issue itself, its comments and its state changes. When a stale issue',
+        'gets activity again, the label is taken off. Create the label first, once:',
+        '  tgl label create stale --for issues',
+        "Only the repo's owner and collaborators can label issues.",
+      ], [
+        'Uso: tgl issue stale [--days N] [--label <nombre>] [--comment <texto>] [--dry-run] [-R cuenta/nombre]',
+        '',
+        '  -d, --days     Días sin actividad para que una issue quede parada (por defecto, 60)',
+        '  -l, --label    Etiqueta que poner a las issues paradas (por defecto, stale)',
+        '      --comment  Publicar también este comentario cuando una issue quede parada',
+        '      --dry-run  Solo mostrar lo que cambiaría',
+        '',
+        'Cuenta como actividad la propia issue, sus comentarios y sus cambios de estado. Cuando',
+        'una issue parada vuelve a tener actividad, se le quita la etiqueta. Crea antes la',
+        'etiqueta, una vez:',
+        '  tgl label create stale --for issues',
+        'Solo el dueño del repo y sus colaboradores pueden etiquetar issues.',
+      ]).join('\n'),
+      options: {
+        ...repoOption,
+        days: { type: 'string', short: 'd', default: '60' },
+        label: { type: 'string', short: 'l', default: 'stale' },
+        comment: { type: 'string' },
+        'dry-run': { type: 'boolean', default: false },
+      },
+      run: markStale,
     },
     close: {
       summary: t('Close an issue (optionally with a comment)', 'Cerrar una issue (con un comentario opcional)'),

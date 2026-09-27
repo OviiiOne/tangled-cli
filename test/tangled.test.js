@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   buildArtifactRecord, buildCommentRecord, buildIssueRecord, commentText, buildIssueStateRecord, buildPullRecord, buildStatusRecord,
-  closingRefs, ISSUE_STATES, latestState, linkClosingRefs, parseNumber, PULL_STATES, tagHashFromRecord,
+  buildRepoRecord, closingRefs, ISSUE_STATES, latestState, linkClosingRefs, parseNumber, PULL_STATES, repoNameProblem, tagHashFromRecord,
 } from '../src/tangled.js';
 
 const now = new Date('2026-09-26T10:00:00Z');
@@ -107,4 +107,20 @@ test('closing numbers become links to the issue, and are still read back', () =>
   assert.equal(linkClosingRefs(linked, 'did:plc:repo'), linked);
   assert.deepEqual(closingRefs(linked), [{ number: 1, repo: 'did:plc:repo' }, { number: 2, repo: 'did:plc:repo' }]);
   assert.equal(linkClosingRefs(undefined, 'did:plc:repo'), undefined);
+});
+
+test('repo record matches the new-repo form', () => {
+  const r = buildRepoRecord({ name: 'My-Tool', knot: 'knot1.tangled.sh', repoDid: 'did:plc:new', description: 'D', now });
+  assert.equal(r.$type, 'sh.tangled.repo');
+  assert.equal(r.name, 'My-Tool');
+  assert.equal(r.description, 'D');
+  assert.equal(r.spindle, undefined);
+  assert.equal(r.labels.length, 5);
+  assert.equal(buildRepoRecord({ name: 'tool', knot: 'k', repoDid: 'did:plc:x', now }).name, undefined);
+});
+
+test('repo names follow the website rules', () => {
+  assert.equal(repoNameProblem('tangled-cli'), null);
+  assert.equal(repoNameProblem('a.b_c'), null);
+  for (const bad of ['', 'a/b', '.hidden', 'end.', 'a..b', 'spa ce', 'ñ']) assert.notEqual(repoNameProblem(bad), null, bad);
 });

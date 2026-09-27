@@ -5,15 +5,16 @@ import {
   branchName, currentBranch, formatPatch, git, isWorkingTreeClean, localRefFor, refExists, remoteDefaultBranch, unpushedCommits,
 } from '../git.js';
 import { t, textLanguage } from '../i18n.js';
+import { formatLabels } from '../labels.js';
 import { expandNumber, findById, isIdOf, loadItems, notFound, repoPeople } from '../repoData.js';
 import {
-  buildCommentRecord, buildIssueStateRecord, buildPullRecord, buildStatusRecord, closingRefs, isFork, linkClosingRefs, NSID, numberForUri,
-  pullPatch, repoGitUrl, repoWebUrl, resolveRepo,
+  buildCommentRecord, buildIssueStateRecord, buildPullRecord, buildStatusRecord, closingRefs, isFork, knotOf, linkClosingRefs, NSID,
+  numberForUri, pullPatch, repoGitUrl, repoWebUrl, resolveRepo,
 } from '../tangled.js';
 import { openSession } from './auth.js';
 import {
-  bodyOptions, checkState, day, editTitleBody, jsonOption, limitOption, loadComments, openInBrowser, parseLimit, parseWebRef,
-  printComments, printJson, readBody, repoOption, webOption,
+  bodyOptions, checkState, day, editTitleBody, itemLabels, jsonOption, labelCommand, limitOption, loadComments, openInBrowser,
+  parseLimit, parseWebRef, printComments, printJson, readBody, repoOption, webOption,
 } from './shared.js';
 
 const NO_REF_EN = 'Without a PR, the open PR of the current branch.';
@@ -59,7 +60,11 @@ async function setPullState(opts, ref, state) {
     console.log(t(`PR "${pull.title}" was already ${STATE_WORDS[state]()}.`, `La PR "${pull.title}" ya estaba ${STATE_WORDS[state]()}.`));
     return;
   }
-  const session = await openSession();
+  await writePullState(opts, await openSession(), pull, repoDid, state);
+}
+
+// Writes the PR's new state and, when merged, closes the issues it says it fixes.
+async function writePullState(opts, session, pull, repoDid, state) {
   const editors = new Set((await repoPeople(whoAmI(), repoDid)).editors);
   const refs = state === 'merged' && !opts['keep-issues'] ? await closingRefsOf(pull, editors) : [];
   // Read while the PR is still listed under its old state, for the link in the comments.
@@ -130,7 +135,7 @@ function checkPushed(repoDid, branch, localRef, { force, dryRun }) {
 
 export default {
   name: 'pr',
-  summary: t('Create, view, check out, edit, update, comment on and close pull requests', 'Crear, ver, probar, editar, actualizar, comentar y cerrar pull requests'),
+  summary: t('Create, view, check out, edit, update, label, comment on, merge and close pull requests', 'Crear, ver, probar, editar, actualizar, etiquetar, comentar, fusionar y cerrar pull requests'),
   commands: {
     create: {
       summary: t("Open a PR from a branch into the repo's default branch", 'Abrir una PR de una rama hacia la rama principal del repo'),
@@ -262,16 +267,20 @@ export default {
         const { pull, repoDid } = await findPull(opts, ref);
         const patch = await pullPatch(pull, repoDid);
         const files = changedFiles(patch);
-        const comments = await loadComments(whoAmI(), pull.uri, { collection: NSID.legacyPullComment, path: '.pull' });
+        const [comments, labels] = await Promise.all([
+          loadComments(whoAmI(), pull.uri, { collection: NSID.legacyPullComment, path: '.pull' }),
+          itemLabels(repoDid, pull),
+        ]);
         const revisions = Math.max(pull.rounds?.length ?? 0, 1);
         if (opts.json) {
           const { rounds, patch: _inline, ...rest } = pull;
-          printJson({ id: pull.rkey, ...rest, revisions, files, comments, ...(opts.patch ? { patch } : {}) });
+          printJson({ id: pull.rkey, ...rest, revisions, labels: labels.map(({ raw, ...l }) => l), files, comments, ...(opts.patch ? { patch } : {}) });
           return;
         }
         const from = isFork(pull, repoDid) ? `(fork) ${pull.source.branch}` : pull.source?.branch ?? t('(patch)', '(parche)');
         console.log(pull.title);
         console.log(`${pull.state} · ${pull.authorHandle} · ${day(pull.createdAt)} · ${from} -> ${pull.target.branch} · ${t('revision', 'revisión')} ${revisions}`);
+        if (labels.length) console.log(`${t('Labels', 'Etiquetas')}: ${formatLabels(labels)}`);
         if (pull.body) console.log(`\n${pull.body}`);
         console.log(t(`\nChanged files (${files.length}):`, `\nArchivos cambiados (${files.length}):`));
         for (const f of files) console.log(`  ${f}`);
@@ -430,6 +439,39 @@ export default {
         console.log(t(`${summary}: sent.`, `${summary}: enviada.`));
       },
     },
+    label: labelCommand('pull', (opts, ref) => findPull(opts, ref).then((r) => r.pull)),
+    merge: {
+      summary: t('Merge a PR on Tangled (its server applies the changes)', 'Fusionar una PR en Tangled (su servidor aplica los cambios)'),
+      usage: t([
+        'Usage: tgl pr merge [<#number | id | branch>] [--keep-issues] [--dry-run] [-R owner/name]',
+        '',
+        "Tangled's server applies the PR's latest revision to its target branch, like the",
+        '"merge" button on the website: each commit is kept (with new hashes). Then the PR',
+        'is marked as merged and the issues it says it fixes are closed (see "tgl pr close").',
+        'Only the owner or a collaborator can merge.',
+        NO_REF_EN,
+        '',
+        '      --dry-run      Only check whether it merges without conflicts',
+        '      --keep-issues  Leave open the issues the PR says it fixes',
+        '',
+        'If you merge locally and push instead, use "tgl pr close --merged".',
+      ], [
+        'Uso: tgl pr merge [<#número | id | rama>] [--keep-issues] [--dry-run] [-R cuenta/nombre]',
+        '',
+        'El servidor de Tangled aplica la última revisión de la PR a su rama destino, como el',
+        'botón "merge" de la web: se mantiene cada commit (con hashes nuevos). Después la PR',
+        'queda fusionada y se cierran las issues que dice resolver (ver "tgl pr close").',
+        'Solo puede fusionar el dueño o un colaborador.',
+        NO_REF_ES,
+        '',
+        '      --dry-run      Solo comprobar si se fusiona sin conflictos',
+        '      --keep-issues  Dejar abiertas las issues que la PR dice resolver',
+        '',
+        'Si fusionas en local y subes, usa en su lugar "tgl pr close --merged".',
+      ]).join('\n'),
+      options: { ...repoOption, 'dry-run': { type: 'boolean', default: false }, 'keep-issues': { type: 'boolean', default: false } },
+      run: (opts, [ref]) => mergePull(opts, ref),
+    },
     close: {
       summary: t('Close a PR (or mark it merged with --merged)', 'Cerrar una PR (o marcarla como fusionada con --merged)'),
       usage: t([
@@ -468,6 +510,56 @@ export default {
     },
   },
 };
+
+// Merges a PR on Tangled itself, as the website's "merge" button does (appview/pulls/
+// merge.go): the repo's knot applies the PR's latest revision to the target branch
+// ("git am" for a format-patch, so each commit is kept, with new hashes), then the PR
+// is marked as merged.
+async function mergePull(opts, ref) {
+  const { pull, repoDid } = await findPull(opts, ref);
+  if (pull.state !== 'open') {
+    throw new TglError(t(`PR "${pull.title}" is ${STATE_WORDS[pull.state]()}; only open PRs can be merged.`, `La PR "${pull.title}" está ${STATE_WORDS[pull.state]()}; solo se pueden fusionar las abiertas.`));
+  }
+  const patch = await pullPatch(pull, repoDid);
+  if (!patch.trim()) throw new TglError(t('This PR has no changes to merge.', 'Esta PR no tiene cambios que fusionar.'));
+  const branch = pull.target.branch;
+  const session = await openSession();
+  const knot = await knotOf(repoDid);
+  const input = { repo: repoDid, patch, branch };
+
+  const check = await session.callService(knot, 'sh.tangled.repo.mergeCheck', input);
+  if (check.error) throw new TglError(t(`Tangled could not check the merge: ${check.error}`, `Tangled no pudo comprobar la fusión: ${check.error}`));
+  if (check.is_conflicted) {
+    const files = (check.conflicts ?? []).map((c) => `  ${c.filename}${c.reason ? ` (${c.reason})` : ''}`);
+    throw new TglError([
+      t(`PR "${pull.title}" has conflicts with ${branch}; nothing was merged.`, `La PR "${pull.title}" tiene conflictos con ${branch}; no se ha fusionado nada.`),
+      ...files,
+      t('Update the branch (e.g. rebase it on the target) and run "tgl pr update".', 'Pon la rama al día (por ejemplo, un rebase sobre la de destino) y ejecuta "tgl pr update".'),
+    ].join('\n'));
+  }
+  const summary = t(`PR "${pull.title}" -> ${branch}`, `PR "${pull.title}" -> ${branch}`);
+  if (opts['dry-run']) {
+    console.log(t(`${summary}: no conflicts. Nothing was merged (--dry-run).`, `${summary}: sin conflictos. No se ha fusionado nada (--dry-run).`));
+    return;
+  }
+
+  const merge = { ...input, commitMessage: pull.title, authorName: pull.authorHandle };
+  if (pull.body) merge.commitBody = pull.body;
+  try {
+    await session.callService(knot, 'sh.tangled.repo.merge', merge);
+  } catch (err) {
+    if (err.xrpcError === 'MergeConflict') {
+      throw new TglError(t(`${branch} changed meanwhile and the PR no longer applies; nothing was merged. ${err.message}`, `${branch} ha cambiado mientras tanto y la PR ya no encaja; no se ha fusionado nada. ${err.message}`));
+    }
+    throw err;
+  }
+  console.log(t(`${summary}: merged on Tangled.`, `${summary}: fusionada en Tangled.`));
+  await writePullState(opts, session, pull, repoDid, 'merged');
+  console.log(t(
+    `Your local copy doesn't have the merge yet: git switch ${branch} && git pull\nIf the repo is mirrored elsewhere (e.g. GitHub), push ${branch} there too.`,
+    `Tu copia local aún no tiene la fusión: git switch ${branch} && git pull\nSi el repo tiene una copia en otro sitio (p. ej. GitHub), sube ${branch} allí también.`,
+  ));
+}
 
 function requireRef(ref) {
   if (!ref) throw new TglError(t('Say which PR: its #number or its id (tgl pr list).', 'Indica la PR: su #número o su id (tgl pr list).'));

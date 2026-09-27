@@ -1,0 +1,18 @@
+# Same as test.yml on the newest Node LTS. One workflow per version: both
+# packages install a `node` binary, so they can't share one environment.
+when:
+  - event: ["push", "pull_request"]
+    branch: ["master"]
+  - event: ["manual"]
+
+engine: microvm
+image: nixos
+
+dependencies:
+  - nodejs_24
+
+steps:
+  - name: "Unit tests (Node 24)"
+    command: |
+      node --version
+      npm test

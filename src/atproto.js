@@ -158,6 +158,13 @@ export class Session {
           'La cuenta o la contraseña de aplicación no son correctas. Vuelve a ejecutar "tgl auth login".',
         ));
       }
+      // Each command that writes logs in once; servers cap logins per account.
+      if (err.status === 429) {
+        throw new TglError(t(
+          'Your account\'s server refused the login: too many in a short time. Wait a few minutes and try again.',
+          'El servidor de tu cuenta ha rechazado el inicio de sesión: demasiados en poco tiempo. Espera unos minutos y vuelve a probar.',
+        ));
+      }
       throw err;
     }
   }
@@ -176,8 +183,8 @@ export class Session {
     return data.blob;
   }
 
-  async createRecord(collection, record) {
-    return this.procedure('com.atproto.repo.createRecord', { repo: this.did, collection, record });
+  async createRecord(collection, record, { rkey } = {}) {
+    return this.procedure('com.atproto.repo.createRecord', { repo: this.did, collection, record, ...(rkey ? { rkey } : {}) });
   }
 
   // One of this account's records, read from its own server (never a cache) so an
@@ -193,6 +200,11 @@ export class Session {
   async putRecord({ uri, cid }, record) {
     const [, collection, rkey] = uri.replace('at://', '').split('/');
     return this.procedure('com.atproto.repo.putRecord', { repo: this.did, collection, rkey, record, swapRecord: cid });
+  }
+
+  async deleteRecord(uri) {
+    const [, collection, rkey] = uri.replace('at://', '').split('/');
+    return this.procedure('com.atproto.repo.deleteRecord', { repo: this.did, collection, rkey });
   }
 
   // Calls a procedure on another service (e.g. a Tangled knot) as this account, with a
