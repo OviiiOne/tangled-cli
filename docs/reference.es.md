@@ -29,6 +29,7 @@
 | `tgl issue edit <issue> [-t "Título"] [-b "Texto"]` | Cambiar el título o la descripción de una issue |
 | `tgl issue comment <issue> -b "Texto"` | Comentar en una issue |
 | `tgl issue label <issue> [--add …] [--remove …]` | Poner o quitar etiquetas a una issue, o verlas |
+| `tgl issue stale [--days N] [--dry-run]` | Etiquetar las issues abiertas sin actividad reciente |
 | `tgl issue close <issue> [-b "Texto"]` | Cerrar una issue, con un comentario opcional |
 | `tgl issue reopen <issue> [-b "Texto"]` | Volver a abrir una issue, con un comentario opcional |
 | `tgl label list` | Ver las etiquetas que usa un repo |
@@ -71,6 +72,31 @@
   `--multiple` para varios valores a la vez; `--for issues|prs|both`; `--color "#E11D48"`.
   Solo el dueño del repo puede crear o quitar etiquetas. `label delete` también borra una
   etiqueta que creaste tú; las de Tangled solo se quitan del repo.
+- `issue stale` pone una etiqueta (por defecto `stale`; créala antes con
+  `tgl label create stale --for issues`) a las issues abiertas sin comentarios ni cambios de
+  estado en `--days` días (por defecto 60), y se la quita cuando vuelven a tener actividad.
+  Solo etiqueta; `--comment "…"` además publica un comentario. Para ejecutarlo cada día,
+  usa una pipeline programada (abajo).
+- En una pipeline de CI, inicia sesión con variables de entorno en vez de `tgl auth login`:
+  `TGL_ACCOUNT` (tu cuenta o DID) y `TGL_APP_PASSWORD` (una contraseña de aplicación aparte,
+  guardada como secreto de la pipeline; Tangled nunca da los secretos a las pipelines de PRs
+  que vienen de forks). Por ejemplo, `.tangled/workflows/stale.yml`:
+
+  ```yaml
+  when:
+    - event: schedule
+      schedule:
+        - cron: "H 6 * * *"
+  engine: microvm
+  image: nixos
+  dependencies:
+    - nodejs_22
+  environment:
+    TGL_ACCOUNT: "ana.bsky.social"   # TGL_APP_PASSWORD va en Settings → Secrets
+  steps:
+    - name: "Marcar issues paradas"
+      command: npx --yes tangled-cli issue stale --days 60 -R "$TANGLED_REPO_DID/$TANGLED_REPO_NAME"
+  ```
 - `repo create` crea un repo vacío (rama principal `main`, servidor `knot1.tangled.sh`);
   `--remote tangled` además lo añade como remoto git. Para las pipelines, elige un servidor
   de CI con `--spindle spindle.tangled.sh` o luego en los ajustes del repo en la web.

@@ -15,6 +15,7 @@ const STORE_NAMES = {
   'secret-service': () => t('system secret store', 'almacén de secretos del sistema'),
   file: () => t('file readable only by you', 'archivo que solo tú puedes leer'),
   plain: () => t('file readable only by you', 'archivo que solo tú puedes leer'),
+  env: () => t('environment variable TGL_APP_PASSWORD (this run only)', 'variable de entorno TGL_APP_PASSWORD (solo esta ejecución)'),
 };
 
 export default {

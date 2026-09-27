@@ -29,6 +29,7 @@
 | `tgl issue edit <issue> [-t "Title"] [-b "Text"]` | Change an issue's title or description |
 | `tgl issue comment <issue> -b "Text"` | Comment on an issue |
 | `tgl issue label <issue> [--add …] [--remove …]` | Add or remove labels on an issue, or list them |
+| `tgl issue stale [--days N] [--dry-run]` | Label open issues with no recent activity |
 | `tgl issue close <issue> [-b "Text"]` | Close an issue, optionally with a comment |
 | `tgl issue reopen <issue> [-b "Text"]` | Reopen an issue, optionally with a comment |
 | `tgl label list` | List the labels a repo uses |
@@ -72,6 +73,31 @@
   `--multiple` for several values at once; `--for issues|prs|both`; `--color "#E11D48"`.
   Only the repo's owner can create or delete labels. `label delete` also deletes a label
   you created; Tangled's own labels are only removed from the repo.
+- `issue stale` puts a label (default `stale`, create it first with
+  `tgl label create stale --for issues`) on open issues with no comments or state changes
+  in `--days` days (default 60), and takes it off when they get activity again. It only
+  labels; `--comment "…"` also posts a comment. To run it every day, use a scheduled pipeline
+  (below).
+- In a CI pipeline, log in with environment variables instead of `tgl auth login`:
+  `TGL_ACCOUNT` (your handle or DID) and `TGL_APP_PASSWORD` (a separate app password,
+  stored as a pipeline secret; Tangled never gives secrets to pipelines of PRs from
+  forks). For example, `.tangled/workflows/stale.yml`:
+
+  ```yaml
+  when:
+    - event: schedule
+      schedule:
+        - cron: "H 6 * * *"
+  engine: microvm
+  image: nixos
+  dependencies:
+    - nodejs_22
+  environment:
+    TGL_ACCOUNT: "alice.bsky.social"   # TGL_APP_PASSWORD goes in Settings → Secrets
+  steps:
+    - name: "Mark stale issues"
+      command: npx --yes tangled-cli issue stale --days 60 -R "$TANGLED_REPO_DID/$TANGLED_REPO_NAME"
+  ```
 - `repo create` makes an empty repo (default branch `main`, host `knot1.tangled.sh`);
   `--remote tangled` also adds it as a git remote. For pipelines, pick a CI server with
   `--spindle spindle.tangled.sh` or later in the repo's settings on the website.
