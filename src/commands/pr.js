@@ -5,6 +5,7 @@ import {
   branchName, currentBranch, formatPatch, git, isWorkingTreeClean, localRefFor, refExists, remoteDefaultBranch, unpushedCommits,
 } from '../git.js';
 import { t, textLanguage } from '../i18n.js';
+import { formatLabels } from '../labels.js';
 import { expandNumber, findById, isIdOf, loadItems, notFound, repoPeople } from '../repoData.js';
 import {
   buildCommentRecord, buildIssueStateRecord, buildPullRecord, buildStatusRecord, closingRefs, isFork, knotOf, linkClosingRefs, NSID,
@@ -12,8 +13,8 @@ import {
 } from '../tangled.js';
 import { openSession } from './auth.js';
 import {
-  bodyOptions, checkState, day, editTitleBody, jsonOption, limitOption, loadComments, openInBrowser, parseLimit, parseWebRef,
-  printComments, printJson, readBody, repoOption, webOption,
+  bodyOptions, checkState, day, editTitleBody, itemLabels, jsonOption, labelCommand, limitOption, loadComments, openInBrowser,
+  parseLimit, parseWebRef, printComments, printJson, readBody, repoOption, webOption,
 } from './shared.js';
 
 const NO_REF_EN = 'Without a PR, the open PR of the current branch.';
@@ -134,7 +135,7 @@ function checkPushed(repoDid, branch, localRef, { force, dryRun }) {
 
 export default {
   name: 'pr',
-  summary: t('Create, view, check out, edit, update, comment on, merge and close pull requests', 'Crear, ver, probar, editar, actualizar, comentar, fusionar y cerrar pull requests'),
+  summary: t('Create, view, check out, edit, update, label, comment on, merge and close pull requests', 'Crear, ver, probar, editar, actualizar, etiquetar, comentar, fusionar y cerrar pull requests'),
   commands: {
     create: {
       summary: t("Open a PR from a branch into the repo's default branch", 'Abrir una PR de una rama hacia la rama principal del repo'),
@@ -266,16 +267,20 @@ export default {
         const { pull, repoDid } = await findPull(opts, ref);
         const patch = await pullPatch(pull, repoDid);
         const files = changedFiles(patch);
-        const comments = await loadComments(whoAmI(), pull.uri, { collection: NSID.legacyPullComment, path: '.pull' });
+        const [comments, labels] = await Promise.all([
+          loadComments(whoAmI(), pull.uri, { collection: NSID.legacyPullComment, path: '.pull' }),
+          itemLabels(repoDid, pull),
+        ]);
         const revisions = Math.max(pull.rounds?.length ?? 0, 1);
         if (opts.json) {
           const { rounds, patch: _inline, ...rest } = pull;
-          printJson({ id: pull.rkey, ...rest, revisions, files, comments, ...(opts.patch ? { patch } : {}) });
+          printJson({ id: pull.rkey, ...rest, revisions, labels: labels.map(({ raw, ...l }) => l), files, comments, ...(opts.patch ? { patch } : {}) });
           return;
         }
         const from = isFork(pull, repoDid) ? `(fork) ${pull.source.branch}` : pull.source?.branch ?? t('(patch)', '(parche)');
         console.log(pull.title);
         console.log(`${pull.state} · ${pull.authorHandle} · ${day(pull.createdAt)} · ${from} -> ${pull.target.branch} · ${t('revision', 'revisión')} ${revisions}`);
+        if (labels.length) console.log(`${t('Labels', 'Etiquetas')}: ${formatLabels(labels)}`);
         if (pull.body) console.log(`\n${pull.body}`);
         console.log(t(`\nChanged files (${files.length}):`, `\nArchivos cambiados (${files.length}):`));
         for (const f of files) console.log(`  ${f}`);
@@ -434,6 +439,7 @@ export default {
         console.log(t(`${summary}: sent.`, `${summary}: enviada.`));
       },
     },
+    label: labelCommand('pull', (opts, ref) => findPull(opts, ref).then((r) => r.pull)),
     merge: {
       summary: t('Merge a PR on Tangled (its server applies the changes)', 'Fusionar una PR en Tangled (su servidor aplica los cambios)'),
       usage: t([

@@ -1,14 +1,15 @@
 import { whoAmI } from '../credentials.js';
 import { TglError } from '../errors.js';
 import { t } from '../i18n.js';
+import { formatLabels } from '../labels.js';
 import { findById, loadItems } from '../repoData.js';
 import {
   buildCommentRecord, buildIssueRecord, buildIssueStateRecord, NSID, repoWebUrl, resolveRepo,
 } from '../tangled.js';
 import { openSession } from './auth.js';
 import {
-  bodyOptions, checkState, day, editTitleBody, jsonOption, limitOption, loadComments, openInBrowser, parseLimit, parseWebRef,
-  printComments, printJson, readBody, repoOption, webOption,
+  bodyOptions, checkState, day, editTitleBody, itemLabels, jsonOption, labelCommand, limitOption, loadComments, openInBrowser,
+  parseLimit, parseWebRef, printComments, printJson, readBody, repoOption, webOption,
 } from './shared.js';
 
 const STATE_WORDS = { open: () => t('open', 'abierta'), closed: () => t('closed', 'cerrada') };
@@ -41,7 +42,7 @@ const commentOnChange = () => t(
 
 export default {
   name: 'issue',
-  summary: t('Create, view, edit, comment on and close issues', 'Crear, ver, editar, comentar y cerrar issues'),
+  summary: t('Create, view, edit, label, comment on and close issues', 'Crear, ver, editar, etiquetar, comentar y cerrar issues'),
   commands: {
     create: {
       summary: t('Open an issue', 'Abrir una issue'),
@@ -108,13 +109,17 @@ export default {
           return;
         }
         const issue = await findIssue(opts, ref);
-        const comments = await loadComments(whoAmI(), issue.uri, { collection: NSID.legacyIssueComment, path: '.issue' });
+        const [comments, labels] = await Promise.all([
+          loadComments(whoAmI(), issue.uri, { collection: NSID.legacyIssueComment, path: '.issue' }),
+          itemLabels((await resolveRepo(opts.repo)).repoDid, issue),
+        ]);
         if (opts.json) {
-          printJson({ id: issue.rkey, ...issue, comments });
+          printJson({ id: issue.rkey, ...issue, labels: labels.map(({ raw, ...l }) => l), comments });
           return;
         }
         console.log(issue.title);
         console.log(`${issue.state} · ${issue.authorHandle} · ${day(issue.createdAt)}`);
+        if (labels.length) console.log(`${t('Labels', 'Etiquetas')}: ${formatLabels(labels)}`);
         if (issue.body) console.log(`\n${issue.body}`);
         printComments(comments);
       },
@@ -154,6 +159,7 @@ export default {
         console.log(t(`Comment posted on "${issue.title}".`, `Comentario publicado en "${issue.title}".`));
       },
     },
+    label: labelCommand('issue', findIssue),
     close: {
       summary: t('Close an issue (optionally with a comment)', 'Cerrar una issue (con un comentario opcional)'),
       usage: `${t('Usage: tgl issue close <#number | id> [--body <comment> | --body-file <file>] [-R owner/name]', 'Uso: tgl issue close <#número | id> [--body <comentario> | --body-file <archivo>] [-R cuenta/nombre]')}\n\n${commentOnChange()}`,
