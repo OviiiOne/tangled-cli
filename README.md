@@ -8,8 +8,8 @@ A command-line tool for [Tangled](https://tangled.org), in the style of GitHub's
 
 ## What it's for
 
-Manage a Tangled repository without leaving the terminal: pull requests, issues and
-release files. It also does a few things Tangled doesn't do on its own yet:
+Manage Tangled without leaving the terminal: create repos, and open, label, merge and
+close pull requests and issues; attach release files. It also does a few things Tangled doesn't do on its own yet:
 
 - **Close issues from a PR.** Write `Fixes #12` in the PR; when you mark it as merged,
   issue #12 is closed with a comment naming the PR.
@@ -20,20 +20,27 @@ release files. It also does a few things Tangled doesn't do on its own yet:
 - **Work from the branch you're on:** `tgl pr view`, `tgl pr close --merged`… with no PR
   number, or with the `#12` the website shows.
 
-It suits repos mirrored on GitHub and Tangled: open the PR on both, merge locally, push
-once, and mark the Tangled PR as merged with `tgl`.
+Merge PRs on Tangled with `tgl pr merge`, or, for repos mirrored on GitHub and Tangled:
+open the PR on both, merge locally, push once, and mark the Tangled PR as merged with
+`tgl pr close --merged`.
 
 No third-party dependencies: only Node.js 20+ and git. MIT licensed.
 
 ## Install
 
 ```bash
+npm install -g tangled-cli
+```
+
+This installs the `tgl` command. Check it with `tgl --version`.
+
+From source, to try unreleased changes:
+
+```bash
 git clone https://tangled.org/did:plc:e6a2dywiq22fgtsjrujrkift tangled-cli
 cd tangled-cli
 npm link
 ```
-
-`npm link` makes the `tgl` command available in any terminal. Check it with `tgl --version`.
 
 ## Log in
 
@@ -62,7 +69,8 @@ Every command has `--help`. The full list, options and how `tgl` works are in th
 
 ## Repositories
 
-The same code lives on both forges; either works for issues and PRs.
+The same code lives on both forges; either works for issues and PRs. See
+[how to contribute](CONTRIBUTING.md).
 
 - Tangled: https://tangled.org/did:plc:e6a2dywiq22fgtsjrujrkift
 - GitHub (mirror): https://github.com/OviiiOne/tangled-cli
