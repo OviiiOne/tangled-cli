@@ -72,6 +72,42 @@ export async function pullPatch(pull, repoDid) {
   return data.patch ?? '';
 }
 
+// "#12" or "12": the number Tangled's website shows for an issue or PR.
+export function parseNumber(ref) {
+  return /^#?\d+$/.test(ref ?? '') ? Number(ref.replace('#', '')) : undefined;
+}
+
+// Numbers are assigned by the website and are in no record, so the at:// address is
+// read from the item's web page (the data-aturi attribute of its "copy address"
+// element, see appview/pages/templates). Null if there is no such item.
+export async function uriForNumber(repoDid, kind, number) {
+  const path = kind === 'pull' ? 'pulls' : 'issues';
+  const res = await fetch(`${repoWebUrl(repoDid)}/${path}/${number}`, { signal: AbortSignal.timeout(15_000) });
+  if (!res.ok && res.status !== 404) {
+    throw new TglError(t(`Could not look up #${number} on Tangled (HTTP ${res.status}).`, `No se pudo buscar el #${number} en Tangled (HTTP ${res.status}).`));
+  }
+  const collection = kind === 'pull' ? NSID.pull : NSID.issue;
+  const m = (await res.text()).match(new RegExp(`data-aturi="(at://[^"/]+/${collection.replaceAll('.', '\\.')}/[a-z0-9]+)"`));
+  return m?.[1] ?? null;
+}
+
+// Issues a PR says it closes, as GitHub reads them: "Fixes #12", "closes: <issue link>",
+// "Resolves at://…/sh.tangled.repo.issue/…". Returns { number, repo? } or { uri }, where
+// `repo` is the "owner/name" or DID from a link (to check it is this repo).
+export function closingRefs(text) {
+  const refs = [];
+  for (const [, token] of (text ?? '').matchAll(/\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?):?\s+(\S+)/gi)) {
+    const ref = token.replace(/[.,;:!?)\]]+$/, '');
+    const number = parseNumber(ref);
+    const link = ref.match(/^(?:https?:\/\/)?tangled\.(?:org|sh)\/(did:[^/]+|[^/]+\/[^/]+)\/issues\/(\d+)$/);
+    const uri = ref.match(new RegExp(`^at://[^/]+/${NSID.issue.replaceAll('.', '\\.')}/[a-z0-9]+$`));
+    if (number !== undefined) refs.push({ number });
+    else if (link) refs.push({ number: Number(link[2]), repo: link[1] });
+    else if (uri) refs.push({ uri: uri[0] });
+  }
+  return refs;
+}
+
 // A PR comes from a fork when its source branch lives in another repo.
 export function isFork(pull, repoDid) {
   return Boolean(pull.source?.repo) && pull.source.repo !== repoDid;

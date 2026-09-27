@@ -1,14 +1,24 @@
 // Options and output helpers shared by several topics.
+import { spawn } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { handleOf } from '../atproto.js';
 import { recordsLinkingTo } from '../backlinks.js';
 import { TglError } from '../errors.js';
 import { t } from '../i18n.js';
-import { authorOf, commentText, NSID } from '../tangled.js';
+import { authorOf, commentText, NSID, parseNumber, repoWebUrl, resolveRepo } from '../tangled.js';
 
 export const repoOption = { repo: { type: 'string', short: 'R' } };
 export const jsonOption = { json: { type: 'boolean', default: false } };
 export const limitOption = { limit: { type: 'string', short: 'L', default: '30' } };
+export const webOption = { web: { type: 'boolean', short: 'w', default: false } };
+
+// Opens a page in the default browser without waiting for it.
+export function openInBrowser(url) {
+  const [cmd, args] = process.platform === 'win32' ? ['cmd', ['/c', 'start', '""', url]]
+    : process.platform === 'darwin' ? ['open', [url]] : ['xdg-open', [url]];
+  spawn(cmd, args, { stdio: 'ignore', detached: true, windowsVerbatimArguments: process.platform === 'win32' }).unref();
+  console.log(t(`Opening ${url}`, `Abriendo ${url}`));
+}
 
 export const bodyOptions = {
   body: { type: 'string', short: 'b' },
@@ -59,4 +69,35 @@ export function printComments(comments) {
     console.log(`\n— ${c.authorHandle}, ${c.createdAt.slice(0, 16).replace('T', ' ')}`);
     console.log(c.body.trim().replace(/^/gm, '  '));
   }
+}
+
+// Changes the title and/or description of one of your own issues or PRs, keeping every
+// other field (Tangled's website edits them the same way: putRecord with swapRecord).
+export async function editTitleBody(session, item, { title, body }, what) {
+  if (item.author !== session.did) {
+    throw new TglError(t(`Only its author can edit this ${what.en}.`, `Solo quien la creó puede editar esta ${what.es}.`));
+  }
+  if (title === undefined && body === undefined) {
+    throw new TglError(t('Nothing to change: pass --title and/or --body.', 'Nada que cambiar: indica --title y/o --body.'));
+  }
+  if (title !== undefined && !title.trim()) throw new TglError(t('The title cannot be empty.', 'El título no puede estar vacío.'));
+  const current = await session.getOwnRecord(item.uri);
+  const value = { ...current.value };
+  if (title !== undefined) value.title = title;
+  if (body !== undefined) value.body = body;
+  await session.putRecord(current, value);
+  return value;
+}
+
+// Web address of an issue or PR. Tangled's pages go by number ("#12"), which records
+// don't carry, so for an id or a branch the list page is opened instead.
+export async function parseWebRef(opts, kind, ref) {
+  const list = `${repoWebUrl((await resolveRepo(opts.repo)).repoDid)}/${kind === 'pull' ? 'pulls' : 'issues'}`;
+  const number = parseNumber(ref);
+  if (number !== undefined) return `${list}/${number}`;
+  console.log(t(
+    "Tangled's pages go by #number, which tgl can't get from an id or a branch: opening the list.",
+    'Las páginas de Tangled van por #número, que tgl no puede sacar de un id o una rama: abro la lista.',
+  ));
+  return list;
 }

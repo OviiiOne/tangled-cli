@@ -8,9 +8,17 @@ A command-line tool for [Tangled](https://tangled.org), in the style of GitHub's
 
 ## What it's for
 
-Manage a Tangled repository without leaving the terminal: open, list, check out, comment
-on and close pull requests; create and follow issues; and attach files (such as a signed
-build) to a release.
+Manage a Tangled repository without leaving the terminal: pull requests, issues and
+release files. It also does a few things Tangled doesn't do on its own yet:
+
+- **Close issues from a PR.** Write `Fixes #12` in the PR; when you mark it as merged,
+  issue #12 is closed with a comment naming the PR.
+- **Keep a PR up to date.** A Tangled PR keeps the changes it was created with.
+  `tgl pr update` sends the new commits of its branch as a new revision.
+- **Attach release files from scripts**, such as a signed build, to a tag.
+- **Catch unpushed commits** before a PR is created or updated.
+- **Work from the branch you're on:** `tgl pr view`, `tgl pr close --merged`… with no PR
+  number, or with the `#12` the website shows.
 
 It suits repos mirrored on GitHub and Tangled: open the PR on both, merge locally, push
 once, and mark the Tangled PR as merged with `tgl`.
@@ -42,9 +50,9 @@ service), never in a repository. `tgl auth logout` deletes it.
 Run `tgl` inside a git repo with a Tangled remote:
 
 ```bash
-tgl pr create -t "Add dark mode" -b "Adds a dark theme"
-tgl pr list
-tgl pr close <id> --merged
+tgl pr create -t "Add dark mode" -b "Fixes #12"
+tgl pr update                 # after pushing more commits
+tgl pr close --merged         # after merging: closes the PR and issue #12
 tgl issue list
 tgl release upload v1.2.0 build.zip
 ```

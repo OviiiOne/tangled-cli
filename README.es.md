@@ -8,9 +8,17 @@ Herramienta de terminal para [Tangled](https://tangled.org), al estilo de `gh` p
 
 ## Para qué sirve
 
-Maneja un repositorio de Tangled sin salir de la terminal: abrir, listar, probar, comentar
-y cerrar pull requests; crear y seguir issues; y adjuntar archivos (por ejemplo una versión
-firmada) a una release.
+Maneja un repositorio de Tangled sin salir de la terminal: pull requests, issues y archivos
+de versión. Además hace algunas cosas que Tangled todavía no hace por sí solo:
+
+- **Cerrar issues desde una PR.** Escribe `Fixes #12` en la PR; al marcarla como fusionada,
+  la issue #12 se cierra con un comentario que nombra la PR.
+- **Mantener una PR al día.** Una PR de Tangled se queda con los cambios con los que se
+  creó. `tgl pr update` envía los commits nuevos de su rama como una revisión nueva.
+- **Adjuntar archivos a una versión desde scripts**, por ejemplo una versión firmada.
+- **Avisar de commits sin subir** antes de crear o actualizar una PR.
+- **Trabajar desde la rama en la que estás:** `tgl pr view`, `tgl pr close --merged`… sin
+  número de PR, o con el `#12` que muestra la web.
 
 Encaja con repos duplicados en GitHub y Tangled: abres la PR en los dos, fusionas en local,
 subes una vez y marcas la PR de Tangled como fusionada con `tgl`.
@@ -43,9 +51,9 @@ servicio de secretos en Linux), nunca en un repositorio. `tgl auth logout` la bo
 Ejecuta `tgl` dentro de un repo git con un remoto de Tangled:
 
 ```bash
-tgl pr create -t "Añadir modo oscuro" -b "Añade un tema oscuro"
-tgl pr list
-tgl pr close <id> --merged
+tgl pr create -t "Añadir modo oscuro" -b "Fixes #12"
+tgl pr update                 # tras subir más commits
+tgl pr close --merged         # tras fusionar: cierra la PR y la issue #12
 tgl issue list
 tgl release upload v1.2.0 build.zip
 ```

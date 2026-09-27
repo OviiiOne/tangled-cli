@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   buildArtifactRecord, buildCommentRecord, buildIssueRecord, commentText, buildIssueStateRecord, buildPullRecord, buildStatusRecord,
-  ISSUE_STATES, latestState, PULL_STATES, tagHashFromRecord,
+  closingRefs, ISSUE_STATES, latestState, parseNumber, PULL_STATES, tagHashFromRecord,
 } from '../src/tangled.js';
 
 const now = new Date('2026-09-26T10:00:00Z');
@@ -75,4 +75,28 @@ test('comments use the shared feed.comment format with a strong reference', () =
   });
   assert.equal(commentText(r), 'Hi');
   assert.equal(commentText({ body: 'old plain text' }), 'old plain text');
+});
+
+test('closing keywords find issue numbers, links and addresses', () => {
+  const text = [
+    'Fixes #12 and closes: #3.',
+    'Resolves https://tangled.org/alice.dev/app/issues/7',
+    'fixed tangled.org/did:plc:repo/issues/8)',
+    'Closes at://did:plc:a/sh.tangled.repo.issue/3abc',
+    'This fixes the bug; see #99. Prefixes #5 do not count.',
+  ].join('\n');
+  assert.deepEqual(closingRefs(text), [
+    { number: 12 },
+    { number: 3 },
+    { number: 7, repo: 'alice.dev/app' },
+    { number: 8, repo: 'did:plc:repo' },
+    { uri: 'at://did:plc:a/sh.tangled.repo.issue/3abc' },
+  ]);
+});
+
+test('website numbers', () => {
+  assert.equal(parseNumber('#12'), 12);
+  assert.equal(parseNumber('7'), 7);
+  assert.equal(parseNumber('3mfq2kx7abcd2'), undefined);
+  assert.equal(parseNumber(undefined), undefined);
 });
