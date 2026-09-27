@@ -42,8 +42,10 @@
 - `pr checkout` crea una rama local con los cambios de una PR para probarlos. Tu copia no
   puede tener cambios sin guardar en un commit. Si los cambios no encajan, no deja nada a medias.
 - `pr close --merged` no fusiona nada: solo cambia el estado de la PR. El merge se hace en
-  local y se sube con push. También cierra las issues que la PR nombra como `Fixes #12` (o
-  `Closes`, `Resolves`, o con un enlace a la issue), con un comentario que nombra la PR;
+  local y se sube con push. También cierra las issues nombradas como `Fixes #12` (o
+  `Closes`, `Resolves`, o con un enlace a la issue) en el título o la descripción de la PR,
+  o en un comentario suyo de quien la creó o del dueño o los colaboradores del repo, con un
+  comentario que enlaza a la PR;
   `--keep-issues` las deja abiertas. Solo issues del mismo repo, y solo si puedes cerrarlas.
   `pr create` y `pr edit` convierten ese `#12` en un enlace a la issue (Tangled muestra un
   `#12` suelto como texto), y el comentario de cierre enlaza de vuelta a la PR.

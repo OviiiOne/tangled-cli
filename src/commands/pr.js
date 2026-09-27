@@ -60,20 +60,28 @@ async function setPullState(opts, ref, state) {
     return;
   }
   const session = await openSession();
-  const closeIssues = state === 'merged' && !opts['keep-issues'] && closingRefs(`${pull.title}\n${pull.body ?? ''}`).length > 0;
+  const editors = new Set((await repoPeople(whoAmI(), repoDid)).editors);
+  const refs = state === 'merged' && !opts['keep-issues'] ? await closingRefsOf(pull, editors) : [];
   // Read while the PR is still listed under its old state, for the link in the comments.
-  const number = closeIssues ? await numberForUri(repoDid, 'pull', { uri: pull.uri, title: pull.title, state: pull.state }) : null;
+  const number = refs.length ? await numberForUri(repoDid, 'pull', { uri: pull.uri, title: pull.title, state: pull.state }) : null;
   await session.createRecord(NSID.pullStatus, buildStatusRecord({ pullUri: pull.uri, state }));
   console.log(t(`PR "${pull.title}" marked as ${STATE_WORDS[state]()}.`, `PR "${pull.title}" marcada como ${STATE_WORDS[state]()}.`));
-  if (closeIssues) await closeLinkedIssues(session, pull, repoDid, number);
+  if (refs.length) await closeLinkedIssues(session, pull, repoDid, { refs, editors, number });
+}
+
+// Issues a PR says it fixes: in its title, its description, or a comment on it by its
+// author or someone who can change the repo's states (owner, collaborators). Other
+// people's comments don't count, or anyone could close issues through someone's PR.
+async function closingRefsOf(pull, editors) {
+  const comments = await loadComments(whoAmI(), pull.uri, { collection: NSID.legacyPullComment, path: '.pull' });
+  const trusted = comments.filter((c) => c.author === pull.author || editors.has(c.author));
+  return closingRefs([pull.title, pull.body ?? '', ...trusted.map((c) => c.body)].join('\n'));
 }
 
 // Closes the issues a merged PR says it fixes ("Fixes #12"), with a comment linking to
 // the PR. Tangled doesn't do this itself yet. Issues of other repos are left alone.
-async function closeLinkedIssues(session, pull, repoDid, number) {
-  const refs = closingRefs(`${pull.title}\n${pull.body ?? ''}`);
+async function closeLinkedIssues(session, pull, repoDid, { refs, editors, number }) {
   const prLink = number ? `[#${number}](${repoWebUrl(repoDid)}/pulls/${number}) ` : '';
-  const editors = new Set((await repoPeople(whoAmI(), repoDid)).editors);
   const done = new Set();
   for (const ref of refs) {
     const label = ref.uri ?? `#${ref.number}`;
@@ -432,8 +440,10 @@ export default {
         '  --keep-issues            With --merged, leave open the issues the PR says it fixes',
         '',
         "This doesn't merge anything: it only changes the PR's state on Tangled.",
-        'With --merged, issues named in the PR as "Fixes #12" (also "Closes", "Resolves",',
-        'or with a link to the issue) are closed with a comment naming the PR.',
+        'With --merged, issues named as "Fixes #12" (also "Closes", "Resolves", or with a',
+        "link to the issue) are closed with a comment linking to the PR. They count in the PR's",
+        "title and description, and in its comments by the PR's author or the repo's owner",
+        'or collaborators.',
       ], [
         'Uso: tgl pr close [<#número | id | rama>] [--merged [--keep-issues]] [-R cuenta/nombre]',
         '',
@@ -442,8 +452,10 @@ export default {
         '  --keep-issues          Con --merged, dejar abiertas las issues que la PR dice resolver',
         '',
         'No fusiona nada: solo cambia el estado de la PR en Tangled.',
-        'Con --merged, las issues que la PR nombra como "Fixes #12" (también "Closes",',
-        '"Resolves", o con un enlace a la issue) se cierran con un comentario que nombra la PR.',
+        'Con --merged, las issues nombradas como "Fixes #12" (también "Closes", "Resolves", o',
+        'con un enlace a la issue) se cierran con un comentario que enlaza a la PR. Cuentan en el',
+        'título y la descripción de la PR, y en sus comentarios de quien creó la PR o del dueño',
+        'o los colaboradores del repo.',
       ]).join('\n'),
       options: { ...repoOption, merged: { type: 'boolean', default: false }, 'keep-issues': { type: 'boolean', default: false } },
       run: (opts, [ref]) => setPullState(opts, ref, opts.merged ? 'merged' : 'closed'),

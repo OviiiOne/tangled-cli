@@ -43,8 +43,10 @@
   working copy must have no uncommitted changes. If the changes don't apply, nothing is
   left behind.
 - `pr close --merged` doesn't merge anything; it only changes the PR's state. Merge
-  locally and push. It also closes the issues the PR names as `Fixes #12` (or `Closes`,
-  `Resolves`, or with a link to the issue), with a comment naming the PR; `--keep-issues`
+  locally and push. It also closes the issues named as `Fixes #12` (or `Closes`,
+  `Resolves`, or with a link to the issue) in the PR's title or description, or in a
+  comment on it by its author or the repo's owner or collaborators, with a comment
+  linking to the PR; `--keep-issues`
   leaves them open. Only issues of the same repo, and only if you may close them.
   `pr create` and `pr edit` turn that `#12` into a link to the issue (Tangled shows a
   plain `#12` as text), and the closing comment links back to the PR.
