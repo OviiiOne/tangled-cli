@@ -90,24 +90,22 @@ export async function itemLabels(repoDid, item) {
 
 // "tgl issue label" and "tgl pr label". `find(opts, ref)` returns the issue or PR.
 export function labelCommand(kind, find) {
-  const what = kind === 'pull' ? { en: 'PR', es: 'PR', ref: '#number | id | branch', refEs: '#número | id | rama' } : { en: 'issue', es: 'issue', ref: '#number | id', refEs: '#número | id' };
+  const what = kind === 'pull' ? { en: 'PR', es: 'PR', ref: '#number | branch', refEs: '#número | rama' } : { en: 'issue', es: 'issue', ref: '#number', refEs: '#número' };
   return {
     summary: t(`Add or remove labels on an ${what.en}, or list them`, `Poner o quitar etiquetas a una ${what.es}, o verlas`),
     usage: t([
       `Usage: tgl ${kind === 'pull' ? 'pr' : 'issue'} label <${what.ref}> [--add <label>]... [--remove <label>]... [-R owner/name]`,
       '',
-      '  -a, --add     Label to add: its name, or name=value for labels that take one',
-      '                (e.g. --add assignee=alice.bsky.social)',
-      '  -r, --remove  Label to remove (name=value removes one value only)',
+      '  -a, --add     Label to add, or someone to assign (--add assignee=alice.bsky.social)',
+      '  -r, --remove  Label to remove, or someone to unassign (--remove assignee: everyone)',
       '',
       "Without --add or --remove, shows its labels and the repo's labels.",
       "Only the repo's owner and collaborators can change labels.",
     ], [
       `Uso: tgl ${kind === 'pull' ? 'pr' : 'issue'} label <${what.refEs}> [--add <etiqueta>]... [--remove <etiqueta>]... [-R cuenta/nombre]`,
       '',
-      '  -a, --add     Etiqueta que poner: su nombre, o nombre=valor en las que llevan valor',
-      '                (p. ej. --add assignee=alice.bsky.social)',
-      '  -r, --remove  Etiqueta que quitar (nombre=valor quita solo ese valor)',
+      '  -a, --add     Etiqueta que poner, o persona a asignar (--add assignee=alice.bsky.social)',
+      '  -r, --remove  Etiqueta que quitar, o persona a desasignar (--remove assignee: todas)',
       '',
       'Sin --add ni --remove, muestra sus etiquetas y las del repo.',
       'Solo el dueño del repo y sus colaboradores pueden cambiar etiquetas.',
@@ -142,8 +140,8 @@ export async function parseWebRef(opts, kind, ref) {
   const number = parseNumber(ref);
   if (number !== undefined) return `${list}/${number}`;
   console.log(t(
-    "Tangled's pages go by #number, which tgl can't get from an id or a branch: opening the list.",
-    'Las páginas de Tangled van por #número, que tgl no puede sacar de un id o una rama: abro la lista.',
+    "Tangled's pages go by #number, which tgl can't get from a branch: opening the list.",
+    'Las páginas de Tangled van por #número, que tgl no puede sacar de una rama: abro la lista.',
   ));
   return list;
 }

@@ -1,5 +1,5 @@
 # Runs the unit tests on every push to master and every PR into it.
-# Spindle docs: https://tangled.org/tangled.org/core/blob/master/docs/DOCS.md#spindles
+# Spindle docs: https://tangled.org/docs/spindles/
 when:
   - event: ["push", "pull_request"]
     branch: ["master"]

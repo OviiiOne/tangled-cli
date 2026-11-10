@@ -22,7 +22,7 @@ npm link     # the tgl command now runs your copy
 npm test
 ```
 
-You need Node.js 20+ and git. There is nothing to install: `tgl` has no dependencies.
+You need Node.js 22+ and git. There is nothing to install: `tgl` has no dependencies.
 
 ## How the code is laid out
 

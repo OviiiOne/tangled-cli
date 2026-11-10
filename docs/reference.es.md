@@ -97,9 +97,11 @@
   ```
 - `repo create` crea un repo vacío (rama principal `main`, servidor `knot1.tangled.sh`);
   `--remote tangled` además lo añade como remoto git. Para las pipelines, elige un servidor
-  de CI con `--spindle spindle.tangled.sh` o luego en los ajustes del repo en la web.
+  de CI con `--spindle spindle.tangled.network` o luego en los ajustes del repo en la web.
 - `--web` abre la página en el navegador. Las páginas de PRs e issues van por número, así
   que con una rama se abre la lista.
+- `tgl` guarda una sesión temporal junto a tu contraseña de aplicación, porque los servidores
+  limitan cuántas veces puede iniciar sesión una cuenta. `tgl auth logout` la termina.
 - En lugar de `-b` se puede usar `-F archivo.md` para leer el texto de un archivo.
 - `release upload`: la etiqueta tiene que ser anotada (`git tag -a`), estar ya subida a
   Tangled y ser la misma que en tu copia. Tangled admite hasta 50 MB por archivo. Una

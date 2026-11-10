@@ -134,15 +134,15 @@ export default {
           console.log(`#${i.rkey}  ${i.state.padEnd(6)}  ${day(i.createdAt).padEnd(10)}  ${i.title}  [${i.authorHandle}]`);
         }
         if (limit && issues.length === limit) {
-          console.log(t(`\nShowing the ${limit} newest. More with --limit 0 (all) or --limit N.`, `\nSe muestran las ${limit} más recientes. Más con --limit 0 (todas) o --limit N.`));
+          console.log(t(`\nOnly the newest ones are shown (${limit}). More with --limit 0 (all) or --limit N.`, `\nSolo se muestran las más recientes (${limit}). Más con --limit 0 (todas) o --limit N.`));
         }
       },
     },
     view: {
       summary: t('Show an issue with its comments', 'Ver una issue con sus comentarios'),
       usage: t(
-        'Usage: tgl issue view <#number | id> [--web] [--json] [-R owner/name]\n\n  -w, --web  Open it in the browser',
-        'Uso: tgl issue view <#número | id> [--web] [--json] [-R cuenta/nombre]\n\n  -w, --web  Abrirla en el navegador',
+        'Usage: tgl issue view <#number> [--web] [--json] [-R owner/name]\n\n  -w, --web  Open it in the browser',
+        'Uso: tgl issue view <#número> [--web] [--json] [-R cuenta/nombre]\n\n  -w, --web  Abrirla en el navegador',
       ),
       options: { ...repoOption, ...jsonOption, ...webOption },
       async run(opts, [ref]) {
@@ -169,11 +169,11 @@ export default {
     edit: {
       summary: t("Change an issue's title or description", 'Cambiar el título o la descripción de una issue'),
       usage: t([
-        'Usage: tgl issue edit <#number | id> [--title <title>] [--body <text> | --body-file <file>] [-R owner/name]',
+        'Usage: tgl issue edit <#number> [--title <title>] [--body <text> | --body-file <file>] [-R owner/name]',
         '',
         'Fields you leave out stay as they are.',
       ], [
-        'Uso: tgl issue edit <#número | id> [--title <título>] [--body <texto> | --body-file <archivo>] [-R cuenta/nombre]',
+        'Uso: tgl issue edit <#número> [--title <título>] [--body <texto> | --body-file <archivo>] [-R cuenta/nombre]',
         '',
         'Lo que no indiques se queda como está.',
       ]).join('\n'),
@@ -188,8 +188,8 @@ export default {
     comment: {
       summary: t('Comment on an issue', 'Comentar en una issue'),
       usage: t(
-        'Usage: tgl issue comment <#number | id> (--body <text> | --body-file <file>) [-R owner/name]',
-        'Uso: tgl issue comment <#número | id> (--body <texto> | --body-file <archivo>) [-R cuenta/nombre]',
+        'Usage: tgl issue comment <#number> (--body <text> | --body-file <file>) [-R owner/name]',
+        'Uso: tgl issue comment <#número> (--body <texto> | --body-file <archivo>) [-R cuenta/nombre]',
       ),
       options: { ...repoOption, ...bodyOptions },
       async run(opts, [ref]) {
@@ -240,13 +240,13 @@ export default {
     },
     close: {
       summary: t('Close an issue (optionally with a comment)', 'Cerrar una issue (con un comentario opcional)'),
-      usage: `${t('Usage: tgl issue close <#number | id> [--body <comment> | --body-file <file>] [-R owner/name]', 'Uso: tgl issue close <#número | id> [--body <comentario> | --body-file <archivo>] [-R cuenta/nombre]')}\n\n${commentOnChange()}`,
+      usage: `${t('Usage: tgl issue close <#number> [--body <comment> | --body-file <file>] [-R owner/name]', 'Uso: tgl issue close <#número> [--body <comentario> | --body-file <archivo>] [-R cuenta/nombre]')}\n\n${commentOnChange()}`,
       options: { ...repoOption, ...bodyOptions },
       run: (opts, [ref]) => setIssueState(opts, ref, 'closed'),
     },
     reopen: {
       summary: t('Reopen an issue (optionally with a comment)', 'Volver a abrir una issue (con un comentario opcional)'),
-      usage: `${t('Usage: tgl issue reopen <#number | id> [--body <comment> | --body-file <file>] [-R owner/name]', 'Uso: tgl issue reopen <#número | id> [--body <comentario> | --body-file <archivo>] [-R cuenta/nombre]')}\n\n${commentOnChange()}`,
+      usage: `${t('Usage: tgl issue reopen <#number> [--body <comment> | --body-file <file>] [-R owner/name]', 'Uso: tgl issue reopen <#número> [--body <comentario> | --body-file <archivo>] [-R cuenta/nombre]')}\n\n${commentOnChange()}`,
       options: { ...repoOption, ...bodyOptions },
       run: (opts, [ref]) => setIssueState(opts, ref, 'open'),
     },

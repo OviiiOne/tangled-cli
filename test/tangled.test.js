@@ -136,6 +136,10 @@ test('closing numbers become links to the issue, and are still read back', () =>
   assert.equal(linkClosingRefs(undefined, 'did:plc:repo'), undefined);
 });
 
+test('a closing number that is a PR stays as text', () => {
+  assert.equal(linkClosingRefs('Fixes #1, closes #2', 'did:plc:r', (n) => n !== 2), 'Fixes [#1](https://tangled.org/did:plc:r/issues/1), closes #2');
+});
+
 test('repo names follow the website rules', () => {
   assert.equal(repoNameProblem('tangled-cli'), null);
   assert.equal(repoNameProblem('a.b_c'), null);

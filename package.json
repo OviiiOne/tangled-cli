@@ -1,6 +1,6 @@
 {
   "name": "tangled-cli",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "tgl: manage Tangled (tangled.org) from the terminal",
   "license": "MIT",
   "type": "module",
@@ -16,7 +16,7 @@
     "CONTRIBUTING.es.md"
   ],
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "scripts": {
     "test": "node --test"

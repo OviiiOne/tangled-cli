@@ -23,7 +23,7 @@ npm link     # el comando tgl ejecuta ahora tu copia
 npm test
 ```
 
-Necesitas Node.js 20 o superior y git. No hay nada que instalar: `tgl` no tiene dependencias.
+Necesitas Node.js 22 o superior y git. No hay nada que instalar: `tgl` no tiene dependencias.
 
 ## Cómo está organizado el código
 

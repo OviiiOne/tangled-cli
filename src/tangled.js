@@ -103,8 +103,10 @@ const CLOSING = /\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?):?\s+(\S+)/gi;
 // Tangled's website shows "#12" as plain text (it isn't GitHub), so "Fixes #12" becomes
 // "Fixes [#12](https://tangled.org/<repo DID>/issues/12)": the text still reads "#12",
 // but it links to the issue. Plain "#12" without a keyword is left alone.
-export function linkClosingRefs(text, repoDid) {
-  return text?.replace(/\b((?:close[sd]?|fix(?:e[sd])?|resolve[sd]?):?\s+)#(\d+)\b/gi, `$1[#$2](${repoWebUrl(repoDid)}/issues/$2)`);
+export function linkClosingRefs(text, repoDid, isIssue = () => true) {
+  return text?.replace(/\b((?:close[sd]?|fix(?:e[sd])?|resolve[sd]?):?\s+)#(\d+)\b/gi, (whole, keyword, number) => (
+    isIssue(Number(number)) ? `${keyword}[#${number}](${repoWebUrl(repoDid)}/issues/${number})` : whole
+  ));
 }
 
 // Issues a PR says it closes, as GitHub reads them: "Fixes #12", "closes: <issue link>",

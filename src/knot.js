@@ -2,7 +2,7 @@
 // website does (web/src/lib/api/cob.ts). The knot checks who is writing from a token
 // addressed to the repo's DID; each create and edit is then attested from the user's
 // own account, so the knot can't put words in anyone's mouth.
-import { API } from './api.js';
+import { API, apiFind } from './api.js';
 import { xrpcQuery } from './atproto.js';
 import { t } from './i18n.js';
 import { authorOf, buildAttestationRecord, buildCommentRecord, knotOf, NSID, ticketUri } from './tangled.js';
@@ -26,6 +26,17 @@ async function attest(session, saved) {
   }
 }
 
+// Tangled's API takes a moment to see a write. Waiting for tickets means the next command
+// reads what this one wrote; giving up after a few seconds is not a failure.
+async function untilIndexed({ uri, cid }) {
+  if (!uri.includes(`/${NSID.ticket}/`)) return;
+  for (let tries = 0; tries < 10; tries += 1) {
+    const view = await apiFind('org.tangled.track.getTicketView', { uri }).catch(() => null);
+    if (view?.cid === cid) return;
+    await new Promise((resolve) => { setTimeout(resolve, 500); });
+  }
+}
+
 export async function readFromKnot(uri) {
   const [repo, collection, rkey] = uri.replace('at://', '').split('/');
   const data = await xrpcQuery(await knotOf(repo), 'com.atproto.repo.getRecord', { repo, collection, rkey });
@@ -35,6 +46,7 @@ export async function readFromKnot(uri) {
 export async function createOnKnot(session, repoDid, collection, record, rkey) {
   const saved = await knotCall(session, repoDid, 'com.atproto.repo.createRecord', { collection, record, ...(rkey ? { rkey } : {}) });
   await attest(session, saved);
+  await untilIndexed(saved);
   return saved;
 }
 
@@ -46,6 +58,7 @@ export async function editOnKnot(session, uri, mutate) {
   const record = mutate(stored);
   const saved = await knotCall(session, repo, 'com.atproto.repo.putRecord', { collection, rkey, swapRecord: current.cid, record });
   await attest(session, saved);
+  await untilIndexed(saved);
   return record;
 }
 

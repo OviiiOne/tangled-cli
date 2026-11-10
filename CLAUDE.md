@@ -11,7 +11,7 @@ Session state lives in `.claude/state.md` (local only, gitignored).
 - Built for the public, not only this project's owner: any repo, default branch, OS or language.
 
 ## Design
-- Node.js ≥ 20 with NO dependencies (built-in fetch, zlib, child_process, node:test).
+- Node.js ≥ 22 with NO dependencies (built-in fetch, child_process, node:test).
 - One file per topic in `src/commands/`, registered in `src/cli.js`. A new topic must
   not require touching the existing ones.
 - Every user-facing message goes through `t(english, spanish)` (`src/i18n.js`); the

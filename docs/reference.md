@@ -97,9 +97,11 @@
   ```
 - `repo create` makes an empty repo (default branch `main`, host `knot1.tangled.sh`);
   `--remote tangled` also adds it as a git remote. For pipelines, pick a CI server with
-  `--spindle spindle.tangled.sh` or later in the repo's settings on the website.
+  `--spindle spindle.tangled.network` or later in the repo's settings on the website.
 - `--web` opens the page in your browser. PR and issue pages go by number, so with a
   branch the list opens instead.
+- `tgl` keeps a temporary session next to your app password, because servers limit how
+  often an account can log in. `tgl auth logout` ends it.
 - `-b` can be replaced by `-F file.md` to read the text from a file.
 - `release upload`: the tag must be annotated (`git tag -a`), already pushed to Tangled,
   and the same tag as in your copy. Tangled accepts up to 50 MB per file. A tag can't get

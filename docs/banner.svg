@@ -8,8 +8,8 @@
   <line x1="40" y1="204" x2="840" y2="204" stroke="#34373f"/>
   <g font-size="15">
     <text x="40" y="242"><tspan fill="#6ee7a8">$</tspan><tspan fill="#f2f2f2"> tgl pr list</tspan></text>
-    <text y="274" fill="#c9ccd3"><tspan x="40">3mfq2kx7abcd2</tspan><tspan x="170" fill="#6ee7a8">open</tspan><tspan x="228">2026-09-27</tspan><tspan x="330">feat/issues -&gt; master</tspan><tspan x="530">Add issue commands</tspan></text>
-    <text y="298" fill="#c9ccd3"><tspan x="40">3mfp8wz4efgh5</tspan><tspan x="170" fill="#6ee7a8">open</tspan><tspan x="228">2026-09-26</tspan><tspan x="330">fix/branch -&gt; master</tspan><tspan x="530">Detect default branch</tspan></text>
+    <text y="274" fill="#c9ccd3"><tspan x="40">#12</tspan><tspan x="170" fill="#6ee7a8">open</tspan><tspan x="228">2026-09-27</tspan><tspan x="330">feat/issues -&gt; master</tspan><tspan x="530">Add issue commands</tspan></text>
+    <text y="298" fill="#c9ccd3"><tspan x="40">#11</tspan><tspan x="170" fill="#6ee7a8">open</tspan><tspan x="228">2026-09-26</tspan><tspan x="330">fix/branch -&gt; master</tspan><tspan x="530">Detect default branch</tspan></text>
     <text x="40" y="338"><tspan fill="#6ee7a8">$</tspan><tspan fill="#f2f2f2"> tgl pr close --merged</tspan></text>
     <text x="40" y="370" fill="#c9ccd3">PR "Detect default branch" marked as merged.</text>
     <text x="40" y="394" fill="#c9ccd3">Issue #7 "Wrong default branch on new repos" <tspan fill="#6ee7a8">closed</tspan>.</text>

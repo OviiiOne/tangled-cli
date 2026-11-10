@@ -1,4 +1,4 @@
-import { apiQuery } from '../api.js';
+import { apiFind, apiQuery } from '../api.js';
 import { mapLimit } from '../atproto.js';
 import { whoAmI } from '../credentials.js';
 import { TglError } from '../errors.js';
@@ -10,7 +10,7 @@ import { mergeCommit, openPull, postComment, setTicketState, submitPatch } from 
 import { formatLabels } from '../labels.js';
 import { findById, loadItems, notFound, repoEditors, withRounds } from '../repoData.js';
 import {
-  buildTicketRecord, closingRefs, isFork, linkClosingRefs, parseTicketRef, pullPatch, repoGitUrl, repoWebUrl, resolveRepo, TICKET_STATES,
+  buildTicketRecord, closingRefs, isFork, linkClosingRefs, parseTicketRef, pullPatch, repoGitUrl, repoWebUrl, resolveRepo, TICKET_STATES, ticketUri,
 } from '../tangled.js';
 import { openSession } from './auth.js';
 import {
@@ -49,6 +49,15 @@ async function findPull(opts, ref) {
   }
   if (!open.length) throw notFound('pull', ref);
   return { pull: open[0], repoDid };
+}
+
+// "Fixes #12" becomes a link to the issue. Issues and PRs share numbers, so a number that
+// turns out to be a PR is left as text: it has no issue page to link to.
+async function linkFixes(text, repoDid) {
+  const numbers = closingRefs(text).filter((r) => r.number !== undefined && !r.repo).map((r) => r.number);
+  const views = await mapLimit(numbers, 8, (n) => apiFind('org.tangled.track.getTicketView', { uri: ticketUri(repoDid, n) }));
+  const pulls = new Set(numbers.filter((_, i) => views[i]?.targetBranch));
+  return linkClosingRefs(text, repoDid, (n) => !pulls.has(n));
 }
 
 function changedFiles(patch) {
@@ -184,7 +193,7 @@ export default {
         checkPushed(repoDid, headBranch, head, { dryRun: opts['dry-run'] });
         console.log(`PR: ${headBranch} -> ${base} (${range.commits} commit${range.commits === 1 ? '' : 's'})`);
 
-        const record = buildTicketRecord({ title: opts.title, body: linkClosingRefs(body, repoDid), targetBranch: base });
+        const record = buildTicketRecord({ title: opts.title, body: await linkFixes(body, repoDid), targetBranch: base });
         if (opts['dry-run']) {
           console.log(t('\nThis would be created (nothing was created):', '\nSe crearía esto (no se ha creado nada):'));
           printJson({ record, base: range.base, head: range.head });
@@ -230,15 +239,15 @@ export default {
           console.log(`#${p.rkey}  ${p.state.padEnd(6)}  ${day(p.createdAt).padEnd(10)}  ${`${from} -> ${p.target.branch}`.padEnd(28)}  ${p.title}  [${p.authorHandle}]`);
         }
         if (limit && pulls.length === limit) {
-          console.log(t(`\nShowing the ${limit} newest. More with --limit 0 (all) or --limit N.`, `\nSe muestran las ${limit} más recientes. Más con --limit 0 (todas) o --limit N.`));
+          console.log(t(`\nOnly the newest ones are shown (${limit}). More with --limit 0 (all) or --limit N.`, `\nSolo se muestran las más recientes (${limit}). Más con --limit 0 (todas) o --limit N.`));
         }
       },
     },
     view: {
       summary: t('Show a PR: description, changed files and comments', 'Ver una PR: descripción, archivos cambiados y comentarios'),
       usage: t(
-        `Usage: tgl pr view [<#number | id | branch>] [--patch] [--web] [--json] [-R owner/name]\n\n  --patch    Show the full changes\n  -w, --web  Open it in the browser\n\n${NO_REF_EN}`,
-        `Uso: tgl pr view [<#número | id | rama>] [--patch] [--web] [--json] [-R cuenta/nombre]\n\n  --patch    Mostrar los cambios completos\n  -w, --web  Abrirla en el navegador\n\n${NO_REF_ES}`,
+        `Usage: tgl pr view [<#number | branch>] [--patch] [--web] [--json] [-R owner/name]\n\n  --patch    Show the full changes\n  -w, --web  Open it in the browser\n\n${NO_REF_EN}`,
+        `Uso: tgl pr view [<#número | rama>] [--patch] [--web] [--json] [-R cuenta/nombre]\n\n  --patch    Mostrar los cambios completos\n  -w, --web  Abrirla en el navegador\n\n${NO_REF_ES}`,
       ),
       options: { ...repoOption, ...jsonOption, ...webOption, patch: { type: 'boolean', default: false } },
       async run(opts, [ref]) {
@@ -271,7 +280,7 @@ export default {
     checkout: {
       summary: t("Bring a PR's changes into a local branch to try them", 'Traer los cambios de una PR a una rama local para probarlos'),
       usage: t([
-        'Usage: tgl pr checkout <#number | id | branch> [--branch <name>] [-R owner/name]',
+        'Usage: tgl pr checkout <#number | branch> [--branch <name>] [-R owner/name]',
         '',
         "Creates a branch from the PR's target branch and applies the PR's commits to it.",
         '  --branch   Name of the new local branch (default: the PR branch, or pr-<id>)',
@@ -279,7 +288,7 @@ export default {
         'Your working copy must have no uncommitted changes. Run "git fetch" first so the',
         'target branch is up to date.',
       ], [
-        'Uso: tgl pr checkout <#número | id | rama> [--branch <nombre>] [-R cuenta/nombre]',
+        'Uso: tgl pr checkout <#número | rama> [--branch <nombre>] [-R cuenta/nombre]',
         '',
         'Crea una rama a partir de la rama destino de la PR y le aplica los commits de la PR.',
         '  --branch   Nombre de la rama local nueva (por defecto, la de la PR, o pr-<id>)',
@@ -329,8 +338,8 @@ export default {
     comment: {
       summary: t('Comment on a PR', 'Comentar en una PR'),
       usage: t(
-        `Usage: tgl pr comment [<#number | id | branch>] (--body <text> | --body-file <file>) [-R owner/name]\n\n${NO_REF_EN}`,
-        `Uso: tgl pr comment [<#número | id | rama>] (--body <texto> | --body-file <archivo>) [-R cuenta/nombre]\n\n${NO_REF_ES}`,
+        `Usage: tgl pr comment [<#number | branch>] (--body <text> | --body-file <file>) [-R owner/name]\n\n${NO_REF_EN}`,
+        `Uso: tgl pr comment [<#número | rama>] (--body <texto> | --body-file <archivo>) [-R cuenta/nombre]\n\n${NO_REF_ES}`,
       ),
       options: { ...repoOption, ...bodyOptions },
       async run(opts, [ref]) {
@@ -343,12 +352,12 @@ export default {
     edit: {
       summary: t("Change a PR's title or description", 'Cambiar el título o la descripción de una PR'),
       usage: t([
-        'Usage: tgl pr edit [<#number | id | branch>] [--title <title>] [--body <text> | --body-file <file>] [-R owner/name]',
+        'Usage: tgl pr edit [<#number | branch>] [--title <title>] [--body <text> | --body-file <file>] [-R owner/name]',
         '',
         'Fields you leave out stay as they are.',
         NO_REF_EN,
       ], [
-        'Uso: tgl pr edit [<#número | id | rama>] [--title <título>] [--body <texto> | --body-file <archivo>] [-R cuenta/nombre]',
+        'Uso: tgl pr edit [<#número | rama>] [--title <título>] [--body <texto> | --body-file <archivo>] [-R cuenta/nombre]',
         '',
         'Lo que no indiques se queda como está.',
         NO_REF_ES,
@@ -356,7 +365,7 @@ export default {
       options: { ...repoOption, title: { type: 'string', short: 't' }, ...bodyOptions },
       async run(opts, [ref]) {
         const { pull, repoDid } = await findPull(opts, ref);
-        const body = linkClosingRefs(readBody(opts), repoDid);
+        const body = await linkFixes(readBody(opts), repoDid);
         const title = await editTitleBody(await openSession(), pull, { title: opts.title, body });
         console.log(t(`PR "${title}" updated.`, `PR "${title}" actualizada.`));
       },
@@ -364,7 +373,7 @@ export default {
     update: {
       summary: t("Send a PR's branch again after new commits (a new revision)", 'Volver a enviar la rama de una PR tras nuevos commits (una revisión nueva)'),
       usage: t([
-        'Usage: tgl pr update [<#number | id | branch>] [--dry-run] [-R owner/name]',
+        'Usage: tgl pr update [<#number | branch>] [--dry-run] [-R owner/name]',
         '',
         'A Tangled PR keeps the changes it was sent with; commits added to the branch later',
         'only show up after this. It adds a new revision, as "resubmit" on the website does.',
@@ -372,7 +381,7 @@ export default {
         '',
         '      --dry-run  Check everything without changing the PR',
       ], [
-        'Uso: tgl pr update [<#número | id | rama>] [--dry-run] [-R cuenta/nombre]',
+        'Uso: tgl pr update [<#número | rama>] [--dry-run] [-R cuenta/nombre]',
         '',
         'Una PR de Tangled se queda con los cambios con los que se envió; los commits que se',
         'añaden después a la rama solo aparecen tras esto. Añade una revisión nueva, como',
@@ -414,7 +423,7 @@ export default {
     merge: {
       summary: t('Merge a PR on Tangled (its server applies the changes)', 'Fusionar una PR en Tangled (su servidor aplica los cambios)'),
       usage: t([
-        'Usage: tgl pr merge [<#number | id | branch>] [--keep-issues] [--dry-run] [-R owner/name]',
+        'Usage: tgl pr merge [<#number | branch>] [--keep-issues] [--dry-run] [-R owner/name]',
         '',
         "Tangled's server applies the PR's latest revision to its target branch, like the",
         '"merge" button on the website: each commit is kept (with new hashes). Then the PR',
@@ -427,7 +436,7 @@ export default {
         '',
         'If you merge locally and push instead, use "tgl pr close --merged".',
       ], [
-        'Uso: tgl pr merge [<#número | id | rama>] [--keep-issues] [--dry-run] [-R cuenta/nombre]',
+        'Uso: tgl pr merge [<#número | rama>] [--keep-issues] [--dry-run] [-R cuenta/nombre]',
         '',
         'El servidor de Tangled aplica la última revisión de la PR a su rama destino, como el',
         'botón "merge" de la web: se mantiene cada commit (con hashes nuevos). Después la PR',
@@ -446,9 +455,9 @@ export default {
     close: {
       summary: t('Close a PR (or mark it merged with --merged)', 'Cerrar una PR (o marcarla como fusionada con --merged)'),
       usage: t([
-        'Usage: tgl pr close [<#number | id | branch>] [--merged [--keep-issues]] [-R owner/name]',
+        'Usage: tgl pr close [<#number | branch>] [--merged [--keep-issues]] [-R owner/name]',
         '',
-        '  <#number | id | branch>  The PR (default: the open PR of the current branch)',
+        '  <#number | branch>  The PR (default: the open PR of the current branch)',
         '  --merged                 Mark it as merged instead of closed',
         '  --keep-issues            With --merged, leave open the issues the PR says it fixes',
         '',
@@ -458,9 +467,9 @@ export default {
         "title and description, and in its comments by the PR's author or the repo's owner",
         'or collaborators.',
       ], [
-        'Uso: tgl pr close [<#número | id | rama>] [--merged [--keep-issues]] [-R cuenta/nombre]',
+        'Uso: tgl pr close [<#número | rama>] [--merged [--keep-issues]] [-R cuenta/nombre]',
         '',
-        '  <#número | id | rama>  La PR (por defecto, la PR abierta de la rama actual)',
+        '  <#número | rama>  La PR (por defecto, la PR abierta de la rama actual)',
         '  --merged               Marcarla como fusionada en vez de cerrada',
         '  --keep-issues          Con --merged, dejar abiertas las issues que la PR dice resolver',
         '',
@@ -475,7 +484,7 @@ export default {
     },
     reopen: {
       summary: t('Reopen a closed PR', 'Volver a abrir una PR cerrada'),
-      usage: t('Usage: tgl pr reopen <#number | id> [-R owner/name]', 'Uso: tgl pr reopen <#número | id> [-R cuenta/nombre]'),
+      usage: t('Usage: tgl pr reopen <#number> [-R owner/name]', 'Uso: tgl pr reopen <#número> [-R cuenta/nombre]'),
       options: repoOption,
       run: (opts, [ref]) => setPullState(opts, requireRef(ref), 'open'),
     },
