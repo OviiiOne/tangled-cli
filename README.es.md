@@ -6,10 +6,6 @@
 
 Herramienta de terminal para [Tangled](https://tangled.org), al estilo de `gh` para GitHub.
 
-> **Adaptándose al nuevo Tangled.** En octubre de 2026 Tangled cambió cómo guarda las issues,
-> las PRs y las etiquetas. `tgl` ya funciona con el formato nuevo en repos, PRs, etiquetas y
-> versiones. Los comandos que cambian issues están en pausa, con un aviso claro: de momento, usa la web para eso.
-
 ## Para qué sirve
 
 Maneja Tangled sin salir de la terminal: crea repos, y abre, etiqueta, fusiona y cierra pull

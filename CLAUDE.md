@@ -23,8 +23,6 @@ Session state lives in `.claude/state.md` (local only, gitignored).
   and PRs are `org.tangled.track.ticket` records on the repo's knot. Check listing changes
   against the web counts of a big repo such as `tangled.org/core`.
 - Writes go to the repo's knot and are attested from the user's account (`src/knot.js`).
-  Issue commands call `writesPaused()` (`src/commands/shared.js`) until they are tried for
-  real; `issue stale` still has to be rewritten.
 - Knot operations use a service-auth token from the user's PDS (`Session.callService`),
   addressed to the repo DID (the knot's did:web only for creating and deleting repos); the
   knot is found in the repo DID document.

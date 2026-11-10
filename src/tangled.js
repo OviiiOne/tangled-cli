@@ -87,6 +87,8 @@ export function ticketFromView(kind, view) {
     state: state === 'completed' ? (kind === 'pull' ? 'merged' : 'closed') : state,
     labels: (record.tangledLabels ?? []).map((l) => l.key),
     assignees: record.assignees ?? [],
+    commentCount: view.commentCount,
+    stateUpdatedAt: view.stateUpdatedAt,
   };
   if (kind === 'pull') item.target = { branch: record.targetBranch };
   return item;
@@ -130,7 +132,7 @@ export function isFork(pull, repoDid) {
 
 // Accepts "owner/name", a repo DID, or nothing (then reads the git remotes).
 export async function resolveRepo(spec) {
-  if (spec?.startsWith('did:')) return { repoDid: spec, label: spec };
+  if (spec?.startsWith('did:') && !spec.includes('/')) return { repoDid: spec, label: spec };
   if (spec) {
     const [owner, name] = spec.split('/');
     if (!owner || !name) {

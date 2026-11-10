@@ -38,7 +38,7 @@ test('a list item becomes a ticket', () => {
   };
   assert.deepEqual(ticketFromView('pull', view), {
     uri: view.uri, cid: 'bafy', rkey: '20', author: 'did:plc:a', title: 'T', body: 'B', createdAt: '2026-09-27T14:31:12Z',
-    state: 'merged', labels: ['area:knot'], assignees: ['did:plc:b'], target: { branch: 'master' },
+    state: 'merged', labels: ['area:knot'], assignees: ['did:plc:b'], commentCount: undefined, stateUpdatedAt: undefined, target: { branch: 'master' },
   });
 });
 

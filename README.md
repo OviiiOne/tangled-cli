@@ -6,10 +6,6 @@
 
 A command-line tool for [Tangled](https://tangled.org), in the style of GitHub's `gh`.
 
-> **Adapting to the new Tangled.** Tangled changed how it stores issues, PRs and labels in
-> October 2026. `tgl` works with the new format for repos, PRs, labels and releases. Commands
-> that change issues are paused, with a clear message, for now: use the website for those.
-
 ## What it's for
 
 Manage Tangled without leaving the terminal: create repos, and open, label, merge and

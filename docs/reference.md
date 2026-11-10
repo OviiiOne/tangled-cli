@@ -2,10 +2,6 @@
 
 [Español](reference.es.md) · [Back to the README](../README.md)
 
-> **Paused for now:** `issue create`, `edit`, `comment`, `close`, `reopen` and `stale`, and
-> adding or removing labels on issues. They stop with a message and change nothing.
-> Everything else works.
-
 ## Commands
 
 | Command | What it does |
@@ -75,7 +71,7 @@
 - `label create` makes your own labels, with an optional `--color "#E11D48"`. Only the repo's
   owner can create or delete them, and a deleted label's name can't be used again in that repo.
 - `issue stale` puts a label (default `stale`, create it first with
-  `tgl label create stale`) on open issues with no comments or state changes
+  `tgl label create stale`) on open issues with no recent comments or reported state changes
   in `--days` days (default 60), and takes it off when they get activity again. It only
   labels; `--comment "…"` also posts a comment. To run it every day, use a scheduled pipeline
   (below).

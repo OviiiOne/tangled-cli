@@ -2,10 +2,6 @@
 
 [English](reference.md) · [Volver al README](../README.es.md)
 
-> **En pausa por ahora:** `issue create`, `edit`, `comment`, `close`, `reopen` y `stale`, y
-> poner o quitar etiquetas en issues. Se paran con un aviso y no cambian nada. Todo lo demás
-> funciona.
-
 ## Comandos
 
 | Comando | Qué hace |

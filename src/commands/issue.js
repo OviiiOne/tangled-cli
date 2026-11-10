@@ -1,13 +1,14 @@
+import { mapLimit } from '../atproto.js';
 import { TglError } from '../errors.js';
 import { t } from '../i18n.js';
-import { createOnKnot, postComment, setTicketState } from '../knot.js';
-import { formatLabels } from '../labels.js';
+import { createOnKnot, editOnKnot, postComment, setTicketState } from '../knot.js';
+import { applyLabelChanges, formatLabels, repoLabels } from '../labels.js';
 import { findById, loadItems } from '../repoData.js';
 import { buildTicketRecord, NSID, repoWebUrl, resolveRepo, TICKET_STATES } from '../tangled.js';
 import { openSession } from './auth.js';
 import {
   bodyOptions, checkState, day, editTitleBody, itemLabels, jsonOption, labelCommand, limitOption, loadComments, openInBrowser,
-  parseLimit, parseWebRef, printComments, printJson, readBody, repoOption, webOption, writesPaused,
+  parseLimit, parseWebRef, printComments, printJson, readBody, repoOption, webOption,
 } from './shared.js';
 
 const STATE_WORDS = { open: () => t('open', 'abierta'), closed: () => t('closed', 'cerrada') };
@@ -18,8 +19,53 @@ async function findIssue(opts, ref) {
   return findById('issue', repoDid, ref);
 }
 
+// Newest activity on an issue: itself, its comments and, when Tangled reports it, its
+// last state change. Label changes and the stale comment itself don't count, or marking
+// it stale would reset it.
+export function lastActivity(issue, comments, staleComment) {
+  const dates = comments.filter((c) => !staleComment || c.body.trim() !== staleComment.trim()).map((c) => c.createdAt);
+  return [issue.createdAt, issue.stateUpdatedAt ?? '', ...dates].reduce((a, b) => (b > a ? b : a), '');
+}
+
+async function markStale(opts) {
+  const days = Number(opts.days);
+  if (!Number.isInteger(days) || days < 0) throw new TglError(t('--days must be a whole number of days.', '--days debe ser un número entero de días.'));
+  const { repoDid, label } = await resolveRepo(opts.repo);
+  const def = (await repoLabels(repoDid)).find((d) => d.name.toLowerCase() === opts.label.toLowerCase());
+  if (!def) {
+    throw new TglError(t(`${label} has no label "${opts.label}". Create it first: tgl label create ${opts.label}`, `${label} no tiene la etiqueta "${opts.label}". Créala antes: tgl label create ${opts.label}`));
+  }
+  const cutoff = new Date(Date.now() - days * 86_400_000).toISOString();
+  const issues = await loadItems('issue', repoDid, { state: 'open' });
+  const checked = await mapLimit(issues, 8, async (issue) => {
+    const comments = issue.commentCount ? await loadComments(issue.uri, { handles: false }) : [];
+    return { issue, active: lastActivity(issue, comments, opts.comment) > cutoff, labelled: issue.labels.includes(def.key) };
+  });
+  const toMark = checked.filter((c) => !c.active && !c.labelled).map((c) => c.issue);
+  const toClear = checked.filter((c) => c.active && c.labelled).map((c) => c.issue);
+  console.log(t(
+    `${issues.length} open issues in ${label}; ${toMark.length} to mark "${def.name}", ${toClear.length} active again.`,
+    `${issues.length} issues abiertas en ${label}; ${toMark.length} para marcar "${def.name}", ${toClear.length} con actividad de nuevo.`,
+  ));
+  for (const i of toMark) console.log(`  + #${i.rkey} ${i.title}`);
+  for (const i of toClear) console.log(`  - #${i.rkey} ${i.title}`);
+  if (opts['dry-run'] || (!toMark.length && !toClear.length)) {
+    if (opts['dry-run']) console.log(t('Nothing was changed (--dry-run).', 'No se ha cambiado nada (--dry-run).'));
+    return;
+  }
+  const session = await openSession();
+  const staleLabel = { key: def.key };
+  for (const issue of toMark) {
+    await editOnKnot(session, issue.uri, (value) => applyLabelChanges(value, { add: [staleLabel], remove: [] }));
+    if (opts.comment?.trim()) await postComment(session, issue.uri, opts.comment);
+  }
+  for (const issue of toClear) {
+    await editOnKnot(session, issue.uri, (value) => applyLabelChanges(value, { add: [], remove: [staleLabel] }));
+  }
+  console.log(t('Done.', 'Hecho.'));
+}
+
 async function setIssueState(opts, ref, state) {
-  writesPaused();
   const body = readBody(opts);
   const issue = await findIssue(opts, ref);
   if (issue.state === state) {
@@ -44,14 +90,13 @@ export default {
     create: {
       summary: t('Open an issue', 'Abrir una issue'),
       usage: t(
-        'Usage: tgl issue create --title <title> (--body <text> | --body-file <file>) [-R owner/name]\n\nTangled requires both a title and a description.',
-        'Uso: tgl issue create --title <título> (--body <texto> | --body-file <archivo>) [-R cuenta/nombre]\n\nTangled exige título y descripción.',
+        'Usage: tgl issue create --title <title> [--body <text> | --body-file <file>] [-R owner/name]',
+        'Uso: tgl issue create --title <título> [--body <texto> | --body-file <archivo>] [-R cuenta/nombre]',
       ),
       options: { ...repoOption, title: { type: 'string', short: 't' }, ...bodyOptions },
       async run(opts) {
-        writesPaused();
         if (!opts.title?.trim()) throw new TglError(t('Missing title: --title "..."', 'Falta el título: --title "..."'));
-        const body = readBody(opts, { required: true });
+        const body = readBody(opts);
         const { repoDid, label } = await resolveRepo(opts.repo);
         const { uri } = await createOnKnot(await openSession(), repoDid, NSID.ticket, buildTicketRecord({ title: opts.title, body }));
         console.log(t(`Issue #${uri.split('/').pop()} created in ${label}.`, `Issue #${uri.split('/').pop()} creada en ${label}.`));
@@ -126,15 +171,14 @@ export default {
       usage: t([
         'Usage: tgl issue edit <#number | id> [--title <title>] [--body <text> | --body-file <file>] [-R owner/name]',
         '',
-        "Only the issue's author can edit it. Fields you leave out stay as they are.",
+        'Fields you leave out stay as they are.',
       ], [
         'Uso: tgl issue edit <#número | id> [--title <título>] [--body <texto> | --body-file <archivo>] [-R cuenta/nombre]',
         '',
-        'Solo quien creó la issue puede editarla. Lo que no indiques se queda como está.',
+        'Lo que no indiques se queda como está.',
       ]).join('\n'),
       options: { ...repoOption, title: { type: 'string', short: 't' }, ...bodyOptions },
       async run(opts, [ref]) {
-        writesPaused();
         const body = readBody(opts);
         const issue = await findIssue(opts, ref);
         const title = await editTitleBody(await openSession(), issue, { title: opts.title, body });
@@ -149,7 +193,6 @@ export default {
       ),
       options: { ...repoOption, ...bodyOptions },
       async run(opts, [ref]) {
-        writesPaused();
         const body = readBody(opts, { required: true });
         const issue = await findIssue(opts, ref);
         await postComment(await openSession(), issue.uri, body);
@@ -167,9 +210,10 @@ export default {
         '      --comment  Also post this comment when an issue becomes stale',
         '      --dry-run  Only show what would change',
         '',
-        'Activity is the issue itself, its comments and its state changes. When a stale issue',
-        'gets activity again, the label is taken off. Create the label first, once:',
-        '  tgl label create stale --for issues',
+        'Activity is the issue itself, its comments and, when Tangled reports it, its last',
+        'state change. When a stale issue gets activity again, the label is taken off.',
+        'Create the label first, once:',
+        '  tgl label create stale',
         "Only the repo's owner and collaborators can label issues.",
       ], [
         'Uso: tgl issue stale [--days N] [--label <nombre>] [--comment <texto>] [--dry-run] [-R cuenta/nombre]',
@@ -179,10 +223,10 @@ export default {
         '      --comment  Publicar también este comentario cuando una issue quede parada',
         '      --dry-run  Solo mostrar lo que cambiaría',
         '',
-        'Cuenta como actividad la propia issue, sus comentarios y sus cambios de estado. Cuando',
-        'una issue parada vuelve a tener actividad, se le quita la etiqueta. Crea antes la',
-        'etiqueta, una vez:',
-        '  tgl label create stale --for issues',
+        'Cuenta como actividad la propia issue, sus comentarios y, si Tangled lo indica, su',
+        'último cambio de estado. Cuando una issue parada vuelve a tener actividad, se le quita',
+        'la etiqueta. Crea antes la etiqueta, una vez:',
+        '  tgl label create stale',
         'Solo el dueño del repo y sus colaboradores pueden etiquetar issues.',
       ]).join('\n'),
       options: {
@@ -192,7 +236,7 @@ export default {
         comment: { type: 'string' },
         'dry-run': { type: 'boolean', default: false },
       },
-      run: writesPaused,
+      run: markStale,
     },
     close: {
       summary: t('Close an issue (optionally with a comment)', 'Cerrar una issue (con un comentario opcional)'),

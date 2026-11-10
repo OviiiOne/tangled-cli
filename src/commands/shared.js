@@ -10,14 +10,6 @@ import { applyLabelChanges, formatLabels, parseLabelArg, repoLabels } from '../l
 import { commentFromView, editTicketText, parseNumber, repoWebUrl, resolveRepo } from '../tangled.js';
 import { openSession } from './auth.js';
 
-// Stops a command that hasn't been tried against Tangled's new record format yet.
-export function writesPaused() {
-  throw new TglError(t(
-    "tgl can't do this yet: it is still being adapted to Tangled's new data format. Nothing was changed. Please do it on tangled.org for now; commands that only read (list, view) do work.",
-    'tgl aún no puede hacer esto: todavía se está adaptando al nuevo formato de datos de Tangled. No se ha cambiado nada. De momento hazlo en tangled.org; los comandos que solo leen (list, view) sí funcionan.',
-  ));
-}
-
 export const repoOption = { repo: { type: 'string', short: 'R' } };
 export const jsonOption = { json: { type: 'boolean', default: false } };
 export const limitOption = { limit: { type: 'string', short: 'L', default: '30' } };
@@ -61,10 +53,11 @@ export function day(isoDate) {
   return (isoDate ?? '').slice(0, 10);
 }
 
-// An issue's or PR's comments, oldest first.
-export async function loadComments(subjectUri) {
+// An issue's or PR's comments, oldest first. Looking up who wrote them is one request
+// each, so callers that don't show them can skip it.
+export async function loadComments(subjectUri, { handles = true } = {}) {
   const comments = (await apiList('org.tangled.feed.listComments', { subject: subjectUri, order: 'asc' })).map(commentFromView);
-  await Promise.all(comments.map(async (c) => { c.authorHandle = await handleOf(c.author); }));
+  if (handles) await Promise.all(comments.map(async (c) => { c.authorHandle = await handleOf(c.author); }));
   return comments;
 }
 
@@ -125,12 +118,10 @@ export function labelCommand(kind, find) {
       remove: { type: 'string', short: 'r', multiple: true, default: [] },
     },
     async run(opts, [ref]) {
-      const changing = opts.add.length || opts.remove.length;
-      if (changing && kind === 'issue') writesPaused();
       const item = await find(opts, ref);
       const { repoDid } = await resolveRepo(opts.repo);
       const defs = await repoLabels(repoDid);
-      if (changing) {
+      if (opts.add.length || opts.remove.length) {
         const add = await Promise.all(opts.add.map((arg) => parseLabelArg(arg, defs)));
         const remove = await Promise.all(opts.remove.map((arg) => parseLabelArg(arg, defs, { removing: true })));
         await editOnKnot(await openSession(), item.uri, (value) => applyLabelChanges(value, { add, remove }));
