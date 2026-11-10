@@ -2,11 +2,9 @@
 
 [Español](reference.es.md) · [Back to the README](../README.md)
 
-> **Paused for now:** `repo create`, `repo set-default-branch`, `release upload`,
-> `label create`, `label delete`, adding or removing labels, and `pr` and `issue` `create`,
-> `comment`, `edit`, `close` and `reopen`, plus `pr update`, `pr merge` and `issue stale`.
-> Tangled changed its data format and they don't write the new one yet. They stop with a
-> message and change nothing. Everything else works.
+> **Paused for now:** `issue create`, `edit`, `comment`, `close`, `reopen` and `stale`, and
+> adding or removing labels on issues. They stop with a message and change nothing.
+> Everything else works.
 
 ## Commands
 
@@ -39,7 +37,7 @@
 | `tgl issue close <issue> [-b "Text"]` | Close an issue, optionally with a comment |
 | `tgl issue reopen <issue> [-b "Text"]` | Reopen an issue, optionally with a comment |
 | `tgl label list` | List the labels a repo uses |
-| `tgl label create <name> [--kind …] [--values …]` | Create a label for your repo |
+| `tgl label create <name> [--color …]` | Create a label for your repo |
 | `tgl label delete <name>` | Remove a label from your repo |
 | `tgl release upload <tag> <files…>` | Attach files (e.g. a signed build) to a tag's release |
 | `tgl release list [<tag>]` | Show the files attached to each release |
@@ -67,20 +65,17 @@
   leaves them open. Only issues of the same repo, and only if you may close them.
   `pr create` and `pr edit` turn that `#12` into a link to the issue (Tangled shows a
   plain `#12` as text), and the closing comment links back to the PR.
-- `pr create` and `pr update` stop if the branch has commits that aren't pushed to Tangled
-  (`--allow-unpushed` goes ahead anyway). A Tangled PR keeps the changes it was sent with:
-  after new commits, push them and run `pr update`.
-- `pr edit`, `pr update` and `issue edit` only work on your own PRs and issues.
-- Labels: `--add good-first-issue`, or `--add assignee=alice.bsky.social` for labels that
-  take a value. `--add` and `--remove` can be repeated. Only the repo's owner and
-  collaborators can change labels; `label` with no options shows the repo's labels.
-- `label create` makes your own labels: `--kind simple` (no value, the default), `text`,
-  `person`, `number` or `yes-no`; `--values high,medium,low` for fixed choices;
-  `--multiple` for several values at once; `--for issues|prs|both`; `--color "#E11D48"`.
-  Only the repo's owner can create or delete labels. `label delete` also deletes a label
-  you created; Tangled's own labels are only removed from the repo.
+- `pr create` and `pr update` stop if the branch has commits that aren't pushed to Tangled:
+  it only accepts commits that are on the branch. A Tangled PR keeps the changes it was sent
+  with: after new commits, push them and run `pr update`.
+- Tangled decides who may edit, close or merge, and `tgl` shows its answer if it refuses.
+- Labels: `--add good-first-issue`, and `--add assignee=alice.bsky.social` to assign someone.
+  `--add` and `--remove` can be repeated; `--remove assignee` removes everyone. `label` with
+  no options shows the repo's labels.
+- `label create` makes your own labels, with an optional `--color "#E11D48"`. Only the repo's
+  owner can create or delete them, and a deleted label's name can't be used again in that repo.
 - `issue stale` puts a label (default `stale`, create it first with
-  `tgl label create stale --for issues`) on open issues with no comments or state changes
+  `tgl label create stale`) on open issues with no comments or state changes
   in `--days` days (default 60), and takes it off when they get activity again. It only
   labels; `--comment "…"` also posts a comment. To run it every day, use a scheduled pipeline
   (below).
@@ -127,6 +122,8 @@ server (its "knot"). An issue and a PR are the same kind of record, a "ticket"; 
 ticket with a target branch, and each of its revisions is another record.
 
 `tgl` reads all of this through [Tangled's public API](https://tangled.org/docs/api/bobbin/),
-which needs no login. The records follow
+which needs no login. To write, it sends the record to the knot with a one-use token your
+account issues for that single action, then saves a signed confirmation ("attestation") in
+your own account, as the website does. The records follow
 [Tangled's lexicons](https://tangled.org/tangled.org/core/tree/master/lexicons/org/tangled)
 and [its records reference](https://tangled.org/docs/reference/records/).

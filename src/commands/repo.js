@@ -3,11 +3,12 @@ import { handleOf } from '../atproto.js';
 import { TglError } from '../errors.js';
 import { git, remoteDefaultBranch } from '../git.js';
 import { t } from '../i18n.js';
+import { knotCall } from '../knot.js';
 import {
-  buildRepoRecord, DEFAULT_KNOT, knotOf, NSID, repoGitUrl, repoNameProblem, repoWebUrl, resolveRepo,
+  buildDeclarationRecord, DEFAULT_KNOT, NSID, repoGitUrl, repoNameProblem, repoWebUrl, resolveRepo,
 } from '../tangled.js';
 import { openSession } from './auth.js';
-import { jsonOption, openInBrowser, printJson, repoOption, webOption, writesPaused } from './shared.js';
+import { jsonOption, openInBrowser, printJson, repoOption, webOption } from './shared.js';
 
 function remoteBranches(url) {
   return [...git(['ls-remote', '--heads', url]).matchAll(/\trefs\/heads\/(\S+)$/gm)].map((m) => m[1]);
@@ -15,16 +16,6 @@ function remoteBranches(url) {
 
 function remoteNames() {
   return git(['remote']).split('\n').filter(Boolean);
-}
-
-async function ownRecordExists(session, uri) {
-  try {
-    await session.getOwnRecord(uri);
-    return true;
-  } catch (err) {
-    if (err.xrpcError === 'RecordNotFound' || err.status === 404) return false;
-    throw err;
-  }
 }
 
 export default {
@@ -104,7 +95,6 @@ export default {
         remote: { type: 'string' },
       },
       async run(opts, [rawName]) {
-        writesPaused();
         const name = rawName?.replace(/\.git$/, '');
         const problem = repoNameProblem(name);
         if (problem) throw new TglError(problem);
@@ -116,19 +106,22 @@ export default {
         }
         const rkey = name.toLowerCase();
         const session = await openSession();
-        const uri = `at://${session.did}/${NSID.repo}/${rkey}`;
-        if (await ownRecordExists(session, uri)) {
-          throw new TglError(t(`You already have a repository called "${rkey}" (or an old record of a renamed one).`, `Ya tienes un repositorio llamado "${rkey}" (o el registro antiguo de uno renombrado).`));
+        if (await session.findOwnRecord(NSID.declaration, rkey)) {
+          throw new TglError(t(`You already have a repository called "${rkey}".`, `Ya tienes un repositorio llamado "${rkey}".`));
         }
         // As the website does: the knot creates the git repo and its DID, then the
-        // record on the user's account announces it to Tangled.
+        // declaration on the user's account claims it.
         const knot = opts.knot.replace(/^https?:\/\//, '').replace(/\/$/, '');
-        const { repoDid } = await session.callService(`https://${knot}`, 'sh.tangled.repo.create', { rkey, name: rkey, defaultBranch: opts.branch });
+        const host = `https://${knot}`;
+        const input = { name, createdAt: new Date().toISOString(), defaultBranch: opts.branch };
+        if (opts.description) input.description = opts.description;
+        if (opts.spindle) input.spindle = `did:web:${opts.spindle.replace(/^https?:\/\//, '').replace(/\/$/, '')}`;
+        const { did: repoDid } = await session.callService(host, 'org.tangled.repo.createRepo', input);
         if (!repoDid) throw new TglError(t(`The knot ${knot} did not return the new repo's DID.`, `El knot ${knot} no ha devuelto el DID del repo nuevo.`));
         try {
-          await session.createRecord(NSID.repo, buildRepoRecord({ name, knot, repoDid, description: opts.description, spindle: opts.spindle }), { rkey });
+          await session.createRecord(NSID.declaration, buildDeclarationRecord({ repoDid }), { rkey });
         } catch (err) {
-          await session.callService(`https://${knot}`, 'sh.tangled.repo.delete', { repo: repoDid, did: session.did, name: rkey, rkey }).catch(() => {});
+          await session.callService(host, 'org.tangled.repo.deleteRepo', { repo: repoDid }).catch(() => {});
           throw err;
         }
         const ssh = `git@tangled.org:${repoDid}`;
@@ -152,16 +145,13 @@ export default {
       ),
       options: repoOption,
       async run(opts, [branch]) {
-        writesPaused();
         if (!branch) throw new TglError(t('Say which branch: tgl repo set-default-branch main', 'Indica la rama: tgl repo set-default-branch master'));
         const { repoDid, label } = await resolveRepo(opts.repo);
         const url = repoGitUrl(repoDid);
         if (!remoteBranches(url).includes(branch)) {
           throw new TglError(t(`Branch "${branch}" does not exist on Tangled. Push it first.`, `La rama "${branch}" no existe en Tangled. Súbela primero.`));
         }
-        const knot = await knotOf(repoDid);
-        const session = await openSession();
-        await session.callService(knot, 'sh.tangled.repo.setDefaultBranch', { repo: repoDid, defaultBranch: branch });
+        await knotCall(await openSession(), repoDid, 'org.tangled.git.setDefaultBranch', { branch });
         console.log(t(`Default branch of ${label} is now "${branch}".`, `La rama principal de ${label} ahora es "${branch}".`));
       },
     },

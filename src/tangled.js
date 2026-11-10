@@ -8,39 +8,23 @@ import { TglError } from './errors.js';
 import { t } from './i18n.js';
 
 export const NSID = {
-  repo: 'sh.tangled.repo',
-  pull: 'sh.tangled.repo.pull',
-  pullStatus: 'sh.tangled.repo.pull.status',
-  comment: 'sh.tangled.feed.comment',
-  legacyPullComment: 'sh.tangled.repo.pull.comment',
-  artifact: 'sh.tangled.repo.artifact',
-  collaborator: 'sh.tangled.repo.collaborator',
-  issue: 'sh.tangled.repo.issue',
-  issueState: 'sh.tangled.repo.issue.state',
-  legacyIssueComment: 'sh.tangled.repo.issue.comment',
+  // Issues and PRs are one record type, kept in the repo's own account on its knot.
+  ticket: 'org.tangled.track.ticket',
+  comment: 'org.tangled.feed.comment',
+  artifact: 'org.tangled.repo.artifact',
+  labelDefinition: 'org.tangled.label.definition',
+  // These two live in the user's own account.
+  declaration: 'org.tangled.repo.declaration',
+  attestation: 'org.tangled.graph.attestation',
 };
 
-export const ISSUE_STATES = {
-  open: 'sh.tangled.repo.issue.state.open',
-  closed: 'sh.tangled.repo.issue.state.closed',
-};
+// tgl's state names -> the ticket's "state" field.
+export const TICKET_STATES = { open: 'open', closed: 'closed', merged: 'completed' };
 
-// Lexicon limit for a release file (sh.tangled.repo.artifact, maxSize).
+// Lexicon limit for a release file (org.tangled.repo.artifact, maxSize).
 export const MAX_ARTIFACT_BYTES = 50 * 1024 * 1024;
 
-export const PULL_STATES = {
-  open: 'sh.tangled.repo.pull.status.open',
-  closed: 'sh.tangled.repo.pull.status.closed',
-  merged: 'sh.tangled.repo.pull.status.merged',
-};
-
-// Issues and PRs are one record type, kept in the repo's own account on its knot.
-const TICKET = 'org.tangled.track.ticket';
-
 const WEB = 'https://tangled.org';
-
-// Tangled's own account; the appview accepts its state changes on any repo.
-export const TANGLED_DID = 'did:plc:wshs7t2adsemcrrd4snkeqli';
 
 export function repoWebUrl(repoDid) {
   return `${WEB}/${repoDid}`;
@@ -74,7 +58,7 @@ export function parseNumber(ref) {
 }
 
 export function ticketUri(repoDid, rkey) {
-  return `at://${repoDid}/${TICKET}/${rkey}`;
+  return `at://${repoDid}/${NSID.ticket}/${rkey}`;
 }
 
 // The record key of a ticket named by its number, its at:// address in this repo, or a
@@ -116,14 +100,13 @@ const CLOSING = /\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?):?\s+(\S+)/gi;
 
 // Tangled's website shows "#12" as plain text (it isn't GitHub), so "Fixes #12" becomes
 // "Fixes [#12](https://tangled.org/<repo DID>/issues/12)": the text still reads "#12",
-// but it links to the issue. Plain "#12" without a keyword is left alone: issues and PRs
-// are numbered separately, so it could be either.
+// but it links to the issue. Plain "#12" without a keyword is left alone.
 export function linkClosingRefs(text, repoDid) {
   return text?.replace(/\b((?:close[sd]?|fix(?:e[sd])?|resolve[sd]?):?\s+)#(\d+)\b/gi, `$1[#$2](${repoWebUrl(repoDid)}/issues/$2)`);
 }
 
 // Issues a PR says it closes, as GitHub reads them: "Fixes #12", "closes: <issue link>",
-// "Resolves at://…/sh.tangled.repo.issue/…". Returns { number, repo? } or { uri }, where
+// "Resolves at://…/org.tangled.track.ticket/…". Returns { number, repo? } or { uri }, where
 // `repo` is the "owner/name" or DID from a link (to check it is this repo).
 export function closingRefs(text) {
   const refs = [];
@@ -132,7 +115,7 @@ export function closingRefs(text) {
     const ref = (token.match(/^\[[^\]]*\]\(([^)\s]+)\)/)?.[1] ?? token).replace(/[.,;:!?)\]]+$/, '');
     const number = parseNumber(ref);
     const link = ref.match(/^(?:https?:\/\/)?tangled\.(?:org|sh)\/(did:[^/]+|[^/]+\/[^/]+)\/issues\/(\d+)$/);
-    const uri = ref.match(new RegExp(`^at://[^/]+/${NSID.issue.replaceAll('.', '\\.')}/[a-z0-9]+$`));
+    const uri = ref.match(new RegExp(`^at://[^/]+/${NSID.ticket.replaceAll('.', '\\.')}/[a-z0-9]+$`));
     if (number !== undefined) refs.push({ number });
     else if (link) refs.push({ number: Number(link[2]), repo: link[1] });
     else if (uri) refs.push({ uri: uri[0] });
@@ -172,49 +155,58 @@ export async function resolveRepo(spec) {
   ));
 }
 
-// Mirrors appview/pulls/create.go: target/source also carry a "repoDid" copy
-// of "repo" for compatibility with knots that still read the old field name.
-export function buildPullRecord({ repoDid, title, body, base, head, patchBlob, now = new Date() }) {
-  const createdAt = now.toISOString();
+const markdown = (text) => ({ $type: 'org.tangled.markup.markdown', text });
+
+// An issue, or a PR when it has a target branch (web/src/lib/api/ticket.ts). The knot
+// refuses an empty body, so a blank one is left out.
+export function buildTicketRecord({ title, body, targetBranch, now = new Date() }) {
   const record = {
-    $type: NSID.pull,
-    title,
-    target: { repo: repoDid, repoDid, branch: base },
-    source: { branch: head },
-    rounds: [{ createdAt, patchBlob }],
-    createdAt,
+    $type: NSID.ticket,
+    title: { $type: 'org.tangled.markup.markdown#inline', text: title },
+    state: 'open',
+    createdAt: now.toISOString(),
   };
-  if (body) record.body = body;
+  if (body?.trim()) record.body = markdown(body);
+  if (targetBranch) record.targetBranch = targetBranch;
   return record;
 }
 
-// Mirrors appview/repo/artifact.go. The optional "repo" at-uri is left out: the
-// appview looks repos up by repoDid first, and one repoDid can have several repo
-// records (e.g. after a rename), so guessing one could point at the wrong name.
-export function buildArtifactRecord({ repoDid, name, tagHash, blob, now = new Date() }) {
+// `title` and `body` are left as they are when undefined; a blank body removes it.
+export function editTicketText(value, { title, body }) {
+  const next = { ...value };
+  if (title !== undefined) next.title = { $type: 'org.tangled.markup.markdown#inline', text: title };
+  if (body !== undefined) {
+    if (body.trim()) next.body = { ...value.body, ...markdown(body) };
+    else delete next.body;
+  }
+  return next;
+}
+
+// A release file, attached to the annotated tag's object by its hash.
+export function buildArtifactRecord({ name, tagHash, blob, now = new Date() }) {
   return {
     $type: NSID.artifact,
+    subject: { $type: 'org.tangled.git.oid', oid: tagHash },
     name,
-    repoDid,
-    tag: { $bytes: Buffer.from(tagHash, 'hex').toString('base64').replace(/=+$/, '') },
     artifact: blob,
     createdAt: now.toISOString(),
   };
 }
 
-export function tagHashFromRecord(record) {
-  return Buffer.from(record.tag.$bytes, 'base64').toString('hex');
+// The user's confirmation that a record written on a knot is really theirs. `saved` is
+// the knot's answer to the write; "x-tngl-change" names the exact change behind it.
+export function buildAttestationRecord(saved, now = new Date()) {
+  const record = { $type: NSID.attestation, subject: { uri: saved.uri, cid: saved.cid }, createdAt: now.toISOString() };
+  if (saved['x-tngl-change']) record.change = saved['x-tngl-change'];
+  return record;
 }
-
-// Labels a new repo starts with on Tangled's website (LABEL_DEFAULTS in appview/config).
-export const DEFAULT_LABELS = ['wontfix', 'good-first-issue', 'duplicate', 'documentation', 'assignee']
-  .map((name) => `at://${TANGLED_DID}/sh.tangled.label.definition/${name}`);
 
 export const DEFAULT_KNOT = 'knot1.tangled.sh';
 
-// Same rules as ValidateRepoName in appview/models/repo.go. Returns an error message or null.
+// Same rules as validateRepoName in web/src/lib/api/repoCreate.ts. Returns an error message or null.
 export function repoNameProblem(name) {
   if (!name) return t('The repository name cannot be empty.', 'El nombre del repositorio no puede estar vacío.');
+  if (name.toLowerCase() === 'self') return t('"self" is a reserved name.', '"self" es un nombre reservado.');
   if (name.length > 100) return t('The name must be 100 characters or fewer.', 'El nombre no puede pasar de 100 caracteres.');
   if (!/^[A-Za-z0-9._-]+$/.test(name)) {
     return t('The name can only have letters, numbers, dots, hyphens and underscores.', 'El nombre solo puede tener letras, números, puntos, guiones y guiones bajos.');
@@ -225,46 +217,24 @@ export function repoNameProblem(name) {
   return null;
 }
 
-// Mirrors Repo.AsRecord in appview/models/repo.go, as written by the new-repo form
-// (appview/state/state.go): the record key is the lowercase name, and "name" only
-// appears when it differs from it.
-export function buildRepoRecord({ name, knot, repoDid, description, spindle, now = new Date() }) {
-  const record = { $type: NSID.repo, knot, labels: DEFAULT_LABELS, repoDid, createdAt: now.toISOString() };
-  if (name !== name.toLowerCase()) record.name = name;
-  if (description) record.description = description;
-  if (spindle) record.spindle = spindle;
-  return record;
+// The owner's half of a repo's ownership claim, in their own account. The record key is
+// the lowercase name; the knot keeps the other half.
+export function buildDeclarationRecord({ repoDid, now = new Date() }) {
+  return { $type: NSID.declaration, repo: repoDid, createdAt: now.toISOString() };
 }
 
-export function buildStatusRecord({ pullUri, state, now = new Date() }) {
-  return { $type: NSID.pullStatus, pull: pullUri, status: PULL_STATES[state], createdAt: now.toISOString() };
-}
-
-// Comments on issues and PRs (lexicons/feed/comment.json). They point at their subject
-// with a strong reference (address + content hash); a PR comment also names the
-// revision it is about. The older per-kind comment collections are deprecated: Tangled
-// no longer shows new ones, but old ones are still read.
-export function buildCommentRecord({ subject, body, pullRoundIdx, now = new Date() }) {
-  const record = {
+// Comments point at their subject with a strong reference (address + content hash).
+export function buildCommentRecord({ subject, body, now = new Date() }) {
+  return {
     $type: NSID.comment,
-    subject: { uri: subject.uri, cid: subject.cid },
-    body: { $type: 'sh.tangled.markup.markdown', text: body, original: body },
+    subject: { $type: 'com.atproto.repo.strongRef', uri: subject.uri, cid: subject.cid },
+    body: markdown(body),
     createdAt: now.toISOString(),
   };
-  if (pullRoundIdx !== undefined) record.pullRoundIdx = pullRoundIdx;
-  return record;
 }
 
 export function commentText(value) {
-  return typeof value.body === 'string' ? value.body : value.body?.text ?? '';
-}
-
-export function buildIssueRecord({ repoDid, title, body, now = new Date() }) {
-  return { $type: NSID.issue, repo: repoDid, title, body, createdAt: now.toISOString() };
-}
-
-export function buildIssueStateRecord({ issueUri, state, now = new Date() }) {
-  return { $type: NSID.issueState, issue: issueUri, state: ISSUE_STATES[state], createdAt: now.toISOString() };
+  return value.body?.text ?? '';
 }
 
 export function authorOf(uri) {

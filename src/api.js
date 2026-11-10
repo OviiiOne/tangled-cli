@@ -4,7 +4,7 @@ import { xrpcQuery } from './atproto.js';
 import { TglError } from './errors.js';
 import { t } from './i18n.js';
 
-const API = 'https://api.tangled.org';
+export const API = 'https://api.tangled.org';
 const MAX_PAGE = 1000;
 
 export function apiQuery(nsid, params) {

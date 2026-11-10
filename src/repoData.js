@@ -1,10 +1,9 @@
 // Loads a repo's PRs or issues, with their current state, from Tangled's API.
 import { apiFind, apiList, apiQuery } from './api.js';
 import { handleOf } from './atproto.js';
-import { recordsLinkingTo } from './backlinks.js';
 import { TglError } from './errors.js';
 import { t } from './i18n.js';
-import { authorOf, NSID, parseTicketRef, TANGLED_DID, ticketFromView, ticketUri } from './tangled.js';
+import { parseTicketRef, ticketFromView, ticketUri } from './tangled.js';
 
 // `states` maps tgl's state names to the API's. Tangled has "completed" for merged PRs;
 // an issue can be closed either way, and tgl shows both as closed.
@@ -13,22 +12,13 @@ const KINDS = {
   issue: { list: 'org.tangled.repo.listIssues', stateParam: 'state', states: { open: ['open'], closed: ['closed', 'completed'] } },
 };
 
-// Old-format owners and collaborators, from sh.tangled.* records. Only the commands
-// paused until they write Tangled's new format still use this.
-export async function repoPeople(account, repoDid) {
-  const records = await recordsLinkingTo({ account, collection: NSID.repo, links: [{ target: repoDid, path: '.repoDid' }] });
-  const recordUris = records.map((r) => r.uri);
-  const collaborators = await recordsLinkingTo({
-    account,
-    collection: NSID.collaborator,
-    links: [{ target: repoDid, path: '.repoDid' }, { target: repoDid, path: '.repo' }, ...recordUris.map((u) => ({ target: u, path: '.repo' }))],
-  });
-  const owners = new Set(records.map((r) => authorOf(r.uri)));
-  return {
-    recordUris,
-    // Only collaborator records written by the owner count.
-    editors: [...owners, ...collaborators.filter((c) => owners.has(authorOf(c.uri))).map((c) => c.value.subject), TANGLED_DID],
-  };
+// The accounts that maintain a repo: its owner and collaborators.
+export async function repoEditors(repoDid) {
+  const [repo, collaborators] = await Promise.all([
+    apiFind('org.tangled.repo.getRepoByRepoDid', { repoDid }),
+    apiList('org.tangled.repo.listCollaborators', { subject: repoDid }),
+  ]);
+  return new Set([repo?.value.declaration?.owner, ...collaborators.map((c) => c.subject)].filter(Boolean));
 }
 
 // Items newest first. `state` filters ("all" for none); `limit` stops early (0 = no limit).

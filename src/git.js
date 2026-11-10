@@ -102,8 +102,9 @@ export function remoteTags(url) {
   return tags;
 }
 
-// The same "git format-patch" text Tangled's own website stores for a branch PR.
-export function formatPatch(base, head) {
+// What a PR revision records: the commit where a branch forked from its target, the
+// branch's newest commit, and how many commits lie between them.
+export function commitRange(base, head) {
   for (const ref of [base, head]) {
     if (!refExists(ref)) {
       throw new TglError(t(`Branch or ref "${ref}" does not exist in this local repository.`, `La rama o referencia "${ref}" no existe en este repositorio local.`));
@@ -111,5 +112,5 @@ export function formatPatch(base, head) {
   }
   const commits = git(['rev-list', '--count', `${base}..${head}`]).trim();
   if (commits === '0') throw new TglError(t(`"${head}" has no new commits compared to "${base}".`, `"${head}" no tiene commits nuevos respecto a "${base}".`));
-  return { patch: git(['format-patch', '--stdout', `${base}..${head}`]), commits: Number(commits) };
+  return { base: git(['merge-base', base, head]).trim(), head: git(['rev-parse', `${head}^{commit}`]).trim(), commits: Number(commits) };
 }

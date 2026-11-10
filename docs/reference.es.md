@@ -2,11 +2,9 @@
 
 [English](reference.md) · [Volver al README](../README.es.md)
 
-> **En pausa por ahora:** `repo create`, `repo set-default-branch`, `release upload`,
-> `label create`, `label delete`, poner o quitar etiquetas, y `create`, `comment`, `edit`,
-> `close` y `reopen` de `pr` e `issue`, además de `pr update`, `pr merge` e `issue stale`.
-> Tangled cambió su formato de datos y aún no escriben el nuevo. Se paran con un aviso y no
-> cambian nada. Todo lo demás funciona.
+> **En pausa por ahora:** `issue create`, `edit`, `comment`, `close`, `reopen` y `stale`, y
+> poner o quitar etiquetas en issues. Se paran con un aviso y no cambian nada. Todo lo demás
+> funciona.
 
 ## Comandos
 
@@ -39,7 +37,7 @@
 | `tgl issue close <issue> [-b "Texto"]` | Cerrar una issue, con un comentario opcional |
 | `tgl issue reopen <issue> [-b "Texto"]` | Volver a abrir una issue, con un comentario opcional |
 | `tgl label list` | Ver las etiquetas que usa un repo |
-| `tgl label create <nombre> [--kind …] [--values …]` | Crear una etiqueta para tu repo |
+| `tgl label create <nombre> [--color …]` | Crear una etiqueta para tu repo |
 | `tgl label delete <nombre>` | Quitar una etiqueta de tu repo |
 | `tgl release upload <etiqueta> <archivos…>` | Adjuntar archivos (por ejemplo un .xpi firmado) a la versión de una etiqueta |
 | `tgl release list [<etiqueta>]` | Ver los archivos subidos a cada versión |
@@ -66,20 +64,18 @@
   `--keep-issues` las deja abiertas. Solo issues del mismo repo, y solo si puedes cerrarlas.
   `pr create` y `pr edit` convierten ese `#12` en un enlace a la issue (Tangled muestra un
   `#12` suelto como texto), y el comentario de cierre enlaza de vuelta a la PR.
-- `pr create` y `pr update` se paran si la rama tiene commits sin subir a Tangled
-  (`--allow-unpushed` sigue de todos modos). Una PR de Tangled se queda con los cambios con
-  los que se envió: tras nuevos commits, súbelos y ejecuta `pr update`.
-- `pr edit`, `pr update` e `issue edit` solo funcionan con tus propias PRs e issues.
-- Etiquetas: `--add good-first-issue`, o `--add assignee=alice.bsky.social` en las que
-  llevan valor. `--add` y `--remove` se pueden repetir. Solo el dueño del repo y sus
-  colaboradores pueden cambiarlas; `label` sin opciones muestra las etiquetas del repo.
-- `label create` crea tus propias etiquetas: `--kind simple` (sin valor, por defecto),
-  `text`, `person`, `number` o `yes-no`; `--values alta,media,baja` para opciones fijas;
-  `--multiple` para varios valores a la vez; `--for issues|prs|both`; `--color "#E11D48"`.
-  Solo el dueño del repo puede crear o quitar etiquetas. `label delete` también borra una
-  etiqueta que creaste tú; las de Tangled solo se quitan del repo.
+- `pr create` y `pr update` se paran si la rama tiene commits sin subir a Tangled: solo acepta
+  commits que estén en la rama. Una PR de Tangled se queda con los cambios con los que se
+  envió: tras nuevos commits, súbelos y ejecuta `pr update`.
+- Tangled decide quién puede editar, cerrar o fusionar, y `tgl` muestra su respuesta si lo rechaza.
+- Etiquetas: `--add good-first-issue`, y `--add assignee=alice.bsky.social` para asignar a
+  alguien. `--add` y `--remove` se pueden repetir; `--remove assignee` quita a todo el mundo.
+  `label` sin opciones muestra las etiquetas del repo.
+- `label create` crea tus propias etiquetas, con un `--color "#E11D48"` opcional. Solo el dueño
+  del repo puede crearlas o borrarlas, y el nombre de una etiqueta borrada no se puede volver
+  a usar en ese repo.
 - `issue stale` pone una etiqueta (por defecto `stale`; créala antes con
-  `tgl label create stale --for issues`) a las issues abiertas sin comentarios ni cambios de
+  `tgl label create stale`) a las issues abiertas sin comentarios ni cambios de
   estado en `--days` días (por defecto 60), y se la quita cuando vuelven a tener actividad.
   Solo etiqueta; `--comment "…"` además publica un comentario. Para ejecutarlo cada día,
   usa una pipeline programada (abajo).
@@ -127,6 +123,8 @@ su servidor git (su "knot"). Una issue y una PR son el mismo tipo de registro, u
 una PR es un ticket con rama de destino, y cada una de sus revisiones es otro registro.
 
 `tgl` lee todo esto con la [API pública de Tangled](https://tangled.org/docs/api/bobbin/),
-que no necesita iniciar sesión. Los registros siguen los
+que no necesita iniciar sesión. Para escribir, envía el registro al knot con un pase de un
+solo uso que emite tu cuenta para esa acción, y guarda en tu cuenta una confirmación firmada
+("attestation"), igual que la web. Los registros siguen los
 [lexicons de Tangled](https://tangled.org/tangled.org/core/tree/master/lexicons/org/tangled)
 y su [referencia de registros](https://tangled.org/docs/reference/records/).

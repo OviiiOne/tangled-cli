@@ -1,13 +1,9 @@
-import { mapLimit } from '../atproto.js';
-import { recordsLinkingTo } from '../backlinks.js';
-import { whoAmI } from '../credentials.js';
 import { TglError } from '../errors.js';
 import { t } from '../i18n.js';
-import { buildLabelOpRecord, formatLabels, LABEL_OP, labelsOf, repoLabelDefs } from '../labels.js';
-import { findById, loadItems, repoPeople } from '../repoData.js';
-import {
-  buildCommentRecord, buildIssueRecord, buildIssueStateRecord, commentText, NSID, repoWebUrl, resolveRepo,
-} from '../tangled.js';
+import { createOnKnot, postComment, setTicketState } from '../knot.js';
+import { formatLabels } from '../labels.js';
+import { findById, loadItems } from '../repoData.js';
+import { buildTicketRecord, NSID, repoWebUrl, resolveRepo, TICKET_STATES } from '../tangled.js';
 import { openSession } from './auth.js';
 import {
   bodyOptions, checkState, day, editTitleBody, itemLabels, jsonOption, labelCommand, limitOption, loadComments, openInBrowser,
@@ -22,63 +18,6 @@ async function findIssue(opts, ref) {
   return findById('issue', repoDid, ref);
 }
 
-// Newest activity on an issue: itself, its comments (current and old format) and its
-// state changes. Label changes and the stale comment itself don't count, or marking it
-// stale would reset it.
-async function lastActivity(issue, staleComment) {
-  const links = (collection, path) => recordsLinkingTo({ account: whoAmI(), collection, links: [{ target: issue.uri, path }] });
-  const records = (await Promise.all([
-    links(NSID.comment, '.subject.uri'), links(NSID.legacyIssueComment, '.issue'), links(NSID.issueState, '.issue'),
-  ])).flat().filter((r) => !staleComment || commentText(r.value).trim() !== staleComment.trim());
-  return [issue.createdAt, ...records.map((r) => r.value.createdAt ?? '')].reduce((a, b) => (b > a ? b : a), '');
-}
-
-async function markStale(opts) {
-  writesPaused();
-  const days = Number(opts.days);
-  if (!Number.isInteger(days) || days < 0) throw new TglError(t('--days must be a whole number of days.', '--days debe ser un número entero de días.'));
-  const { repoDid, label } = await resolveRepo(opts.repo);
-  const defs = await repoLabelDefs(whoAmI(), repoDid);
-  const def = defs.find((d) => d.name.toLowerCase() === opts.label.toLowerCase());
-  if (!def) {
-    throw new TglError(t(`${label} has no label "${opts.label}". Create it first: tgl label create ${opts.label} --for issues`, `${label} no tiene la etiqueta "${opts.label}". Créala antes: tgl label create ${opts.label} --for issues`));
-  }
-  if (def.valueType?.type !== 'null') throw new TglError(t(`"${def.name}" takes a value; use a simple label.`, `"${def.name}" lleva valor; usa una etiqueta simple.`));
-  const { editors } = await repoPeople(whoAmI(), repoDid);
-  const cutoff = new Date(Date.now() - days * 86_400_000).toISOString();
-  const issues = await loadItems('issue', repoDid, { state: 'open' });
-  const checked = await mapLimit(issues, 8, async (issue) => ({
-    issue,
-    active: (await lastActivity(issue, opts.comment)) > cutoff,
-    labelled: (await labelsOf(whoAmI(), issue.uri, defs, editors)).some((l) => l.uri === def.uri),
-  }));
-  const toMark = checked.filter((c) => !c.active && !c.labelled).map((c) => c.issue);
-  const toClear = checked.filter((c) => c.active && c.labelled).map((c) => c.issue);
-  console.log(t(
-    `${issues.length} open issues in ${label}; ${toMark.length} to mark "${def.name}", ${toClear.length} active again.`,
-    `${issues.length} issues abiertas en ${label}; ${toMark.length} para marcar "${def.name}", ${toClear.length} con actividad de nuevo.`,
-  ));
-  for (const i of toMark) console.log(`  + ${i.title}`);
-  for (const i of toClear) console.log(`  - ${i.title}`);
-  if (opts['dry-run'] || (!toMark.length && !toClear.length)) {
-    if (opts['dry-run']) console.log(t('Nothing was changed (--dry-run).', 'No se ha cambiado nada (--dry-run).'));
-    return;
-  }
-  const session = await openSession();
-  if (!editors.includes(session.did)) {
-    throw new TglError(t("Only the repo's owner and collaborators can label issues.", 'Solo el dueño del repo y sus colaboradores pueden etiquetar issues.'));
-  }
-  const operand = [{ key: def.uri, value: 'null' }];
-  for (const issue of toMark) {
-    await session.createRecord(LABEL_OP, buildLabelOpRecord({ subjectUri: issue.uri, add: operand, remove: [] }));
-    if (opts.comment?.trim()) await session.createRecord(NSID.comment, buildCommentRecord({ subject: issue, body: opts.comment }));
-  }
-  for (const issue of toClear) {
-    await session.createRecord(LABEL_OP, buildLabelOpRecord({ subjectUri: issue.uri, add: [], remove: operand }));
-  }
-  console.log(t('Done.', 'Hecho.'));
-}
-
 async function setIssueState(opts, ref, state) {
   writesPaused();
   const body = readBody(opts);
@@ -88,10 +27,8 @@ async function setIssueState(opts, ref, state) {
     return;
   }
   const session = await openSession();
-  if (body?.trim()) {
-    await session.createRecord(NSID.comment, buildCommentRecord({ subject: issue, body }));
-  }
-  await session.createRecord(NSID.issueState, buildIssueStateRecord({ issueUri: issue.uri, state }));
+  if (body?.trim()) await postComment(session, issue.uri, body);
+  await setTicketState(session, issue.uri, TICKET_STATES[state]);
   console.log(t(`Issue "${issue.title}" marked as ${STATE_WORDS[state]()}.`, `Issue "${issue.title}" marcada como ${STATE_WORDS[state]()}.`));
 }
 
@@ -116,9 +53,8 @@ export default {
         if (!opts.title?.trim()) throw new TglError(t('Missing title: --title "..."', 'Falta el título: --title "..."'));
         const body = readBody(opts, { required: true });
         const { repoDid, label } = await resolveRepo(opts.repo);
-        const session = await openSession();
-        const { uri } = await session.createRecord(NSID.issue, buildIssueRecord({ repoDid, title: opts.title, body }));
-        console.log(t(`Issue created in ${label}. Id: ${uri.split('/').pop()}`, `Issue creada en ${label}. Id: ${uri.split('/').pop()}`));
+        const { uri } = await createOnKnot(await openSession(), repoDid, NSID.ticket, buildTicketRecord({ title: opts.title, body }));
+        console.log(t(`Issue #${uri.split('/').pop()} created in ${label}.`, `Issue #${uri.split('/').pop()} creada en ${label}.`));
         console.log(t(
           `See it at: ${repoWebUrl(repoDid)}/issues (Tangled may take a few seconds to show it)`,
           `Mírala en: ${repoWebUrl(repoDid)}/issues (Tangled puede tardar unos segundos en mostrarla)`,
@@ -201,9 +137,8 @@ export default {
         writesPaused();
         const body = readBody(opts);
         const issue = await findIssue(opts, ref);
-        const session = await openSession();
-        const value = await editTitleBody(session, issue, { title: opts.title, body }, { en: 'issue', es: 'issue' });
-        console.log(t(`Issue "${value.title}" updated.`, `Issue "${value.title}" actualizada.`));
+        const title = await editTitleBody(await openSession(), issue, { title: opts.title, body });
+        console.log(t(`Issue "${title}" updated.`, `Issue "${title}" actualizada.`));
       },
     },
     comment: {
@@ -217,8 +152,7 @@ export default {
         writesPaused();
         const body = readBody(opts, { required: true });
         const issue = await findIssue(opts, ref);
-        const session = await openSession();
-        await session.createRecord(NSID.comment, buildCommentRecord({ subject: issue, body }));
+        await postComment(await openSession(), issue.uri, body);
         console.log(t(`Comment posted on "${issue.title}".`, `Comentario publicado en "${issue.title}".`));
       },
     },
@@ -258,7 +192,7 @@ export default {
         comment: { type: 'string' },
         'dry-run': { type: 'boolean', default: false },
       },
-      run: markStale,
+      run: writesPaused,
     },
     close: {
       summary: t('Close an issue (optionally with a comment)', 'Cerrar una issue (con un comentario opcional)'),

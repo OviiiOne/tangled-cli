@@ -1,7 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';
 import { resolveHandle, resolvePds } from './atproto.js';
-import { reportUnreachable } from './backlinks.js';
 import { useEnvLogin } from './credentials.js';
 import { TglError } from './errors.js';
 import { t } from './i18n.js';
@@ -99,7 +98,6 @@ export async function main(argv) {
       strict: true,
     });
     await command.run(values, positionals);
-    reportUnreachable();
     return 0;
   } catch (err) {
     if (err instanceof TglError) {

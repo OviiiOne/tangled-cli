@@ -5,15 +5,16 @@ import { apiList } from '../api.js';
 import { handleOf } from '../atproto.js';
 import { TglError } from '../errors.js';
 import { t } from '../i18n.js';
-import { formatLabels, repoLabels } from '../labels.js';
-import { commentFromView, parseNumber, repoWebUrl, resolveRepo } from '../tangled.js';
+import { editOnKnot } from '../knot.js';
+import { applyLabelChanges, formatLabels, parseLabelArg, repoLabels } from '../labels.js';
+import { commentFromView, editTicketText, parseNumber, repoWebUrl, resolveRepo } from '../tangled.js';
+import { openSession } from './auth.js';
 
-// Stops a command that still writes Tangled's old record format: the write would succeed
-// but the website no longer reads those records, so the user's work would vanish.
+// Stops a command that hasn't been tried against Tangled's new record format yet.
 export function writesPaused() {
   throw new TglError(t(
-    "tgl can't do this yet: Tangled changed how it stores this data, and the website would not show the change. Nothing was changed. Please do it on tangled.org for now; commands that only read (list, view) do work.",
-    'tgl aún no puede hacer esto: Tangled ha cambiado cómo guarda estos datos y la web no mostraría el cambio. No se ha cambiado nada. De momento hazlo en tangled.org; los comandos que solo leen (list, view) sí funcionan.',
+    "tgl can't do this yet: it is still being adapted to Tangled's new data format. Nothing was changed. Please do it on tangled.org for now; commands that only read (list, view) do work.",
+    'tgl aún no puede hacer esto: todavía se está adaptando al nuevo formato de datos de Tangled. No se ha cambiado nada. De momento hazlo en tangled.org; los comandos que solo leen (list, view) sí funcionan.',
   ));
 }
 
@@ -75,22 +76,15 @@ export function printComments(comments) {
   }
 }
 
-// Changes the title and/or description of one of your own issues or PRs, keeping every
-// other field (Tangled's website edits them the same way: putRecord with swapRecord).
-export async function editTitleBody(session, item, { title, body }, what) {
-  if (item.author !== session.did) {
-    throw new TglError(t(`Only its author can edit this ${what.en}.`, `Solo quien la creó puede editar esta ${what.es}.`));
-  }
+// Changes the title and/or description of an issue or PR, keeping every other field.
+// The knot decides who may. Returns the title it ends up with.
+export async function editTitleBody(session, item, { title, body }) {
   if (title === undefined && body === undefined) {
     throw new TglError(t('Nothing to change: pass --title and/or --body.', 'Nada que cambiar: indica --title y/o --body.'));
   }
   if (title !== undefined && !title.trim()) throw new TglError(t('The title cannot be empty.', 'El título no puede estar vacío.'));
-  const current = await session.getOwnRecord(item.uri);
-  const value = { ...current.value };
-  if (title !== undefined) value.title = title;
-  if (body !== undefined) value.body = body;
-  await session.putRecord(current, value);
-  return value;
+  const saved = await editOnKnot(session, item.uri, (value) => editTicketText(value, { title, body }));
+  return saved.title.text;
 }
 
 // Labels of an issue or PR, for "view". People assigned to it show as an "assignee" label.
@@ -131,10 +125,18 @@ export function labelCommand(kind, find) {
       remove: { type: 'string', short: 'r', multiple: true, default: [] },
     },
     async run(opts, [ref]) {
-      if (opts.add.length || opts.remove.length) writesPaused();
+      const changing = opts.add.length || opts.remove.length;
+      if (changing && kind === 'issue') writesPaused();
       const item = await find(opts, ref);
       const { repoDid } = await resolveRepo(opts.repo);
       const defs = await repoLabels(repoDid);
+      if (changing) {
+        const add = await Promise.all(opts.add.map((arg) => parseLabelArg(arg, defs)));
+        const remove = await Promise.all(opts.remove.map((arg) => parseLabelArg(arg, defs, { removing: true })));
+        await editOnKnot(await openSession(), item.uri, (value) => applyLabelChanges(value, { add, remove }));
+        console.log(t(`Labels of "${item.title}" updated.`, `Etiquetas de "${item.title}" actualizadas.`));
+        return;
+      }
       console.log(item.title);
       console.log(`${t('Labels', 'Etiquetas')}: ${formatLabels(await itemLabels(repoDid, item)) || t('(none)', '(ninguna)')}`);
       console.log(`${t("Repo's labels", 'Etiquetas del repo')}: ${defs.map((d) => d.name).join(', ') || t('(none)', '(ninguna)')}`);

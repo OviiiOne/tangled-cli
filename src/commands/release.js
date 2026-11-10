@@ -4,11 +4,12 @@ import { apiList } from '../api.js';
 import { TglError } from '../errors.js';
 import { annotatedTagHash, remoteTags } from '../git.js';
 import { t } from '../i18n.js';
+import { createOnKnot, uploadToKnot } from '../knot.js';
 import {
   buildArtifactRecord, MAX_ARTIFACT_BYTES, NSID, repoGitUrl, repoWebUrl, resolveRepo,
 } from '../tangled.js';
 import { openSession } from './auth.js';
-import { day, jsonOption, printJson, repoOption, writesPaused } from './shared.js';
+import { day, jsonOption, printJson, repoOption } from './shared.js';
 
 const MIME_TYPES = {
   '.xpi': 'application/x-xpinstall',
@@ -58,7 +59,6 @@ export default {
       ]).join('\n'),
       options: { ...repoOption, 'dry-run': { type: 'boolean', default: false } },
       async run(opts, [tag, ...files]) {
-        writesPaused();
         if (!tag || !files.length) {
           throw new TglError(t('Give the tag and at least one file: tgl release upload v1.0.0 build.zip', 'Indica la etiqueta y al menos un archivo: tgl release upload v1.0.0 archivo.xpi'));
         }
@@ -98,13 +98,13 @@ export default {
 
         const session = await openSession();
         for (const u of uploads) {
-          const blob = await session.uploadBlob(readFileSync(u.file), u.mimeType);
-          await session.createRecord(NSID.artifact, buildArtifactRecord({ repoDid, name: u.name, tagHash, blob }));
+          const blob = await uploadToKnot(session, repoDid, readFileSync(u.file), u.mimeType);
+          await createOnKnot(session, repoDid, NSID.artifact, buildArtifactRecord({ name: u.name, tagHash, blob }));
           console.log(t(`Uploaded: ${u.name}`, `Subido: ${u.name}`));
         }
         console.log(t(
           `\nSee it at: ${repoWebUrl(repoDid)}/tags (Tangled may take a few seconds to show it)`,
-          `\nMírala en:${repoWebUrl(repoDid)}/tags (Tangled puede tardar unos segundos en mostrarla)`,
+          `\nMírala en: ${repoWebUrl(repoDid)}/tags (Tangled puede tardar unos segundos en mostrarla)`,
         ));
       },
     },

@@ -22,11 +22,12 @@ Session state lives in `.claude/state.md` (local only, gitignored).
 - Reads go through Tangled's public API, bobbin (`src/api.js`, `src/repoData.js`). Issues
   and PRs are `org.tangled.track.ticket` records on the repo's knot. Check listing changes
   against the web counts of a big repo such as `tangled.org/core`.
-- Commands that still write the old `sh.tangled.*` format call `writesPaused()`
-  (`src/commands/shared.js`) first. Move each to the new format, then drop the call and
-  the old helpers it used (`repoPeople`, `backlinks.js`, most of `labels.js`).
-- Knot operations (e.g. `repo set-default-branch`) use a service-auth token from the
-  user's PDS (`Session.callService`); the knot is found in the repo DID document.
+- Writes go to the repo's knot and are attested from the user's account (`src/knot.js`).
+  Issue commands call `writesPaused()` (`src/commands/shared.js`) until they are tried for
+  real; `issue stale` still has to be rewritten.
+- Knot operations use a service-auth token from the user's PDS (`Session.callService`),
+  addressed to the repo DID (the knot's did:web only for creating and deleting repos); the
+  knot is found in the repo DID document.
 - Auth = app password in the OS secret store (`src/credentials.js`: DPAPI, Keychain,
   secret-tool, 0600 file as a last resort). The user types it in their own terminal
   (`tgl auth login`). Never read it, print it or ask for it. The macOS and Linux paths

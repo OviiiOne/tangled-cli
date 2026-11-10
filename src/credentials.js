@@ -98,16 +98,18 @@ const STORES = {
   },
 };
 
-function saveSecret(did, secret) {
+function saveSecret(did, secret, { warn = true } = {}) {
   if (process.platform === 'win32') return { scheme: 'dpapi', value: STORES.dpapi.save(did, secret) };
   if (process.platform === 'darwin') return { scheme: 'keychain', value: STORES.keychain.save(did, secret) };
   try {
     return { scheme: 'secret-service', value: STORES['secret-service'].save(did, secret) };
   } catch {
-    console.error(t(
-      'Warning: no system secret store found (secret-tool). The app password is saved in a file only your user can read.',
-      'Aviso: no hay almacén de secretos del sistema (secret-tool). La contraseña se guarda en un archivo que solo tu usuario puede leer.',
-    ));
+    if (warn) {
+      console.error(t(
+        'Warning: no system secret store found (secret-tool). The app password is saved in a file only your user can read.',
+        'Aviso: no hay almacén de secretos del sistema (secret-tool). La contraseña se guarda en un archivo que solo tu usuario puede leer.',
+      ));
+    }
     return { scheme: 'file', value: secret };
   }
 }
@@ -166,6 +168,47 @@ export function deleteLogin() {
   const info = readLoginInfo();
   if (info) storeFor(info.store).remove(info.did);
   rmSync(loginFile(), { force: true });
+  deleteSession();
+}
+
+// The session tokens of the last login, kept next to the app password so each command
+// doesn't have to log in: servers cap logins per account. They are only a convenience, so
+// failing to save or read them never stops a command. Never kept for a CI login.
+function sessionFile() {
+  return join(configDir(), 'session.json');
+}
+
+const sessionKey = (did) => `${did}#session`;
+
+export function saveSession(did, tokens) {
+  if (envLogin) return;
+  try {
+    mkdirSync(configDir(), { recursive: true });
+    const secret = saveSecret(sessionKey(did), JSON.stringify(tokens), { warn: false });
+    writeFileSync(sessionFile(), JSON.stringify({ did, secret }), { mode: 0o600 });
+  } catch {
+    // The next command logs in again.
+  }
+}
+
+export function loadSession(did) {
+  if (envLogin || !existsSync(sessionFile())) return null;
+  try {
+    const data = JSON.parse(readFileSync(sessionFile(), 'utf8'));
+    return data.did === did ? JSON.parse(storeFor(data.secret.scheme).load(sessionKey(did), data.secret.value)) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function deleteSession() {
+  try {
+    const { did, secret } = JSON.parse(readFileSync(sessionFile(), 'utf8'));
+    storeFor(secret.scheme).remove(sessionKey(did));
+  } catch {
+    // Nothing saved, or nothing readable: the file goes anyway.
+  }
+  rmSync(sessionFile(), { force: true });
 }
 
 // Reads a line from the terminal without echoing what is typed.
