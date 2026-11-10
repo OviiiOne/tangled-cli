@@ -1,13 +1,12 @@
 import { readFileSync, statSync } from 'node:fs';
 import { basename, extname } from 'node:path';
-import { recordsLinkingTo } from '../backlinks.js';
-import { whoAmI } from '../credentials.js';
+import { apiList } from '../api.js';
 import { TglError } from '../errors.js';
 import { annotatedTagHash, remoteTags } from '../git.js';
 import { t } from '../i18n.js';
-import { repoPeople } from '../repoData.js';
+import { createOnKnot, uploadToKnot } from '../knot.js';
 import {
-  authorOf, buildArtifactRecord, MAX_ARTIFACT_BYTES, NSID, repoGitUrl, repoWebUrl, resolveRepo, tagHashFromRecord,
+  buildArtifactRecord, MAX_ARTIFACT_BYTES, NSID, repoGitUrl, repoWebUrl, resolveRepo,
 } from '../tangled.js';
 import { openSession } from './auth.js';
 import { day, jsonOption, printJson, repoOption } from './shared.js';
@@ -33,17 +32,10 @@ function formatSize(bytes) {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
-// Release files from anyone Tangled accepts them from: the owner and collaborators.
-async function loadArtifacts(account, repoDid) {
-  const { recordUris, editors } = await repoPeople(account, repoDid);
-  const records = await recordsLinkingTo({
-    account,
-    collection: NSID.artifact,
-    links: [{ target: repoDid, path: '.repoDid' }, ...recordUris.map((u) => ({ target: u, path: '.repo' }))],
-  });
-  return records
-    .filter((r) => editors.includes(authorOf(r.uri)) || authorOf(r.uri) === account.did)
-    .map((r) => ({ rkey: r.uri.split('/').pop(), tagHash: tagHashFromRecord(r.value), ...r.value }));
+// A repo's release files. `subject.oid` is the hash of the annotated tag they belong to.
+async function loadArtifacts(repoDid) {
+  const items = await apiList('org.tangled.repo.listArtifacts', { subject: repoDid });
+  return items.map((i) => ({ rkey: i.uri.split('/').pop(), tagHash: i.value.subject.oid, ...i.value }));
 }
 
 export default {
@@ -83,7 +75,7 @@ export default {
           throw new TglError(t(`Tag "${tag}" on Tangled is not the same as in your local copy.`, `La etiqueta "${tag}" de Tangled no es la misma que la de tu copia local.`));
         }
 
-        const existing = (await loadArtifacts(whoAmI(), repoDid)).filter((a) => a.tagHash === tagHash);
+        const existing = (await loadArtifacts(repoDid)).filter((a) => a.tagHash === tagHash);
         const uploads = files.map((file) => {
           const size = statSync(file).size;
           const name = basename(file);
@@ -106,13 +98,13 @@ export default {
 
         const session = await openSession();
         for (const u of uploads) {
-          const blob = await session.uploadBlob(readFileSync(u.file), u.mimeType);
-          await session.createRecord(NSID.artifact, buildArtifactRecord({ repoDid, name: u.name, tagHash, blob }));
+          const blob = await uploadToKnot(session, repoDid, readFileSync(u.file), u.mimeType);
+          await createOnKnot(session, repoDid, NSID.artifact, buildArtifactRecord({ name: u.name, tagHash, blob }));
           console.log(t(`Uploaded: ${u.name}`, `Subido: ${u.name}`));
         }
         console.log(t(
           `\nSee it at: ${repoWebUrl(repoDid)}/tags (Tangled may take a few seconds to show it)`,
-          `\nMírala en:${repoWebUrl(repoDid)}/tags (Tangled puede tardar unos segundos en mostrarla)`,
+          `\nMírala en: ${repoWebUrl(repoDid)}/tags (Tangled puede tardar unos segundos en mostrarla)`,
         ));
       },
     },
@@ -123,7 +115,7 @@ export default {
       async run(opts, [tag]) {
         const { repoDid, label } = await resolveRepo(opts.repo);
         const names = new Map([...remoteTags(repoGitUrl(repoDid))].map(([name, hash]) => [hash, name]));
-        const artifacts = (await loadArtifacts(whoAmI(), repoDid))
+        const artifacts = (await loadArtifacts(repoDid))
           .map((a) => ({ ...a, tag: names.get(a.tagHash) ?? t(`(deleted tag ${a.tagHash.slice(0, 7)})`, `(etiqueta borrada ${a.tagHash.slice(0, 7)})`) }))
           .filter((a) => !tag || a.tag === tag)
           .sort((a, b) => b.createdAt.localeCompare(a.createdAt));

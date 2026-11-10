@@ -4,10 +4,6 @@ import { t } from './i18n.js';
 
 const PLC_DIRECTORY = 'https://plc.directory';
 const PUBLIC_API = 'https://public.api.bsky.app';
-// Slingshot (https://slingshot.microcosm.blue) is a public, read-only cache of AT
-// Protocol records: much faster than asking each author's own server, which may be
-// slow or down. Records are still checked against the author's server if it fails.
-const SLINGSHOT = 'https://slingshot.microcosm.blue';
 
 async function readJson(res, what) {
   const text = await res.text();
@@ -15,7 +11,9 @@ async function readJson(res, what) {
   try {
     data = text ? JSON.parse(text) : {};
   } catch {
-    throw new TglError(t(`${what}: unexpected server response (HTTP ${res.status}).`, `${what}: respuesta inesperada del servidor (HTTP ${res.status}).`));
+    const err = new TglError(t(`${what}: unexpected server response (HTTP ${res.status}).`, `${what}: respuesta inesperada del servidor (HTTP ${res.status}).`));
+    err.status = res.status;
+    throw err;
   }
   if (!res.ok) {
     const detail = [data.error, data.message].filter(Boolean).join(': ');
@@ -66,51 +64,6 @@ export async function xrpcQuery(host, nsid, params = {}) {
   return readJson(await fetch(`${host}/xrpc/${nsid}?${qs}`, { signal: AbortSignal.timeout(15_000) }), nsid);
 }
 
-// Lists every record of a collection, following pagination.
-export async function listAllRecords(pds, repo, collection) {
-  const records = [];
-  let cursor;
-  do {
-    const page = await xrpcQuery(pds, 'com.atproto.repo.listRecords', { repo, collection, limit: 100, cursor });
-    records.push(...page.records);
-    cursor = page.records.length ? page.cursor : undefined;
-  } while (cursor);
-  return records;
-}
-
-const pdsCache = new Map();
-
-function cachedPds(did) {
-  if (!pdsCache.has(did)) pdsCache.set(did, resolvePds(did));
-  return pdsCache.get(did);
-}
-
-// Fetches one record by its at:// address; null if it was deleted.
-export async function getRecord(uri) {
-  const [did, collection, rkey] = uri.replace('at://', '').split('/');
-  const params = { repo: did, collection, rkey };
-  for (const host of [SLINGSHOT, null]) {
-    try {
-      const data = await xrpcQuery(host ?? await cachedPds(did), 'com.atproto.repo.getRecord', params);
-      return { uri, cid: data.cid, value: data.value };
-    } catch (err) {
-      if (host === null) {
-        if (err.xrpcError === 'RecordNotFound') return null;
-        throw err;
-      }
-      // Any cache failure (including "not found", which may just be stale): ask the author's server.
-    }
-  }
-}
-
-// Downloads a file (blob) attached to one of `did`'s records.
-export async function fetchBlob(did, blob) {
-  const qs = new URLSearchParams({ did, cid: blob.ref.$link });
-  const res = await fetch(`${await cachedPds(did)}/xrpc/com.atproto.sync.getBlob?${qs}`);
-  if (!res.ok) throw new TglError(t(`Could not download the attached file (HTTP ${res.status}).`, `No se pudo descargar el archivo adjunto (HTTP ${res.status}).`));
-  return Buffer.from(await res.arrayBuffer());
-}
-
 // Public handle of an account, or its DID if it has none.
 export async function handleOf(did) {
   try {
@@ -141,6 +94,30 @@ export class Session {
     this.did = data.did;
     this.handle = data.handle;
     this.accessJwt = data.accessJwt;
+    this.refreshJwt = data.refreshJwt;
+  }
+
+  // Picks up a saved session: as it is if the server still accepts it, or renewed if not.
+  // Null when neither works, so the caller logs in again.
+  static async resume(pds, { accessJwt, refreshJwt }) {
+    const call = (method, nsid, token) => fetch(`${pds}/xrpc/${nsid}`, { method, headers: { authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(15_000) });
+    try {
+      const current = await call('GET', 'com.atproto.server.getSession', accessJwt);
+      if (current.ok) return new Session(pds, { ...(await current.json()), accessJwt, refreshJwt });
+      const renewed = await call('POST', 'com.atproto.server.refreshSession', refreshJwt);
+      return renewed.ok ? new Session(pds, await renewed.json()) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  // Ends a saved session on the server, so its tokens stop working. Best effort.
+  static async end(pds, { refreshJwt }) {
+    await fetch(`${pds}/xrpc/com.atproto.server.deleteSession`, { method: 'POST', headers: { authorization: `Bearer ${refreshJwt}` }, signal: AbortSignal.timeout(15_000) }).catch(() => {});
+  }
+
+  get tokens() {
+    return { accessJwt: this.accessJwt, refreshJwt: this.refreshJwt };
   }
 
   static async login(pds, identifier, password) {
@@ -158,7 +135,7 @@ export class Session {
           'La cuenta o la contraseña de aplicación no son correctas. Vuelve a ejecutar "tgl auth login".',
         ));
       }
-      // Each command that writes logs in once; servers cap logins per account.
+      // Servers cap logins per account.
       if (err.status === 429) {
         throw new TglError(t(
           'Your account\'s server refused the login: too many in a short time. Wait a few minutes and try again.',
@@ -178,47 +155,33 @@ export class Session {
     return readJson(res, nsid);
   }
 
-  async uploadBlob(bytes, mimeType) {
-    const data = await this.procedure('com.atproto.repo.uploadBlob', bytes, { contentType: mimeType });
-    return data.blob;
-  }
-
   async createRecord(collection, record, { rkey } = {}) {
     return this.procedure('com.atproto.repo.createRecord', { repo: this.did, collection, record, ...(rkey ? { rkey } : {}) });
   }
 
-  // One of this account's records, read from its own server (never a cache) so an
-  // edit starts from the latest version.
-  async getOwnRecord(uri) {
-    const [, collection, rkey] = uri.replace('at://', '').split('/');
-    const data = await xrpcQuery(this.pds, 'com.atproto.repo.getRecord', { repo: this.did, collection, rkey });
-    return { uri, cid: data.cid, value: data.value };
-  }
-
-  // Replaces a record only if it is still the version read (`swapRecord` = its cid),
-  // so a change made meanwhile elsewhere is never overwritten.
-  async putRecord({ uri, cid }, record) {
-    const [, collection, rkey] = uri.replace('at://', '').split('/');
-    return this.procedure('com.atproto.repo.putRecord', { repo: this.did, collection, rkey, record, swapRecord: cid });
-  }
-
-  async deleteRecord(uri) {
-    const [, collection, rkey] = uri.replace('at://', '').split('/');
-    return this.procedure('com.atproto.repo.deleteRecord', { repo: this.did, collection, rkey });
+  // One of this account's records, or null if it has no such record.
+  async findOwnRecord(collection, rkey) {
+    try {
+      return await xrpcQuery(this.pds, 'com.atproto.repo.getRecord', { repo: this.did, collection, rkey });
+    } catch (err) {
+      if (err.xrpcError === 'RecordNotFound' || err.status === 404) return null;
+      throw err;
+    }
   }
 
   // Calls a procedure on another service (e.g. a Tangled knot) as this account, with a
-  // short-lived token from the account's server that only allows that one method.
-  async callService(host, nsid, body) {
-    const qs = new URLSearchParams({ aud: `did:web:${new URL(host).host}`, lxm: nsid, exp: String(Math.floor(Date.now() / 1000) + 60) });
+  // short-lived token from the account's server that only allows one method. `aud` is who
+  // the token is for: the service itself unless it says otherwise.
+  async callService(host, nsid, body, { aud = `did:web:${new URL(host).host}`, lxm = nsid, contentType = 'application/json' } = {}) {
+    const qs = new URLSearchParams({ aud, lxm, exp: String(Math.floor(Date.now() / 1000) + 60) });
     const res = await fetch(`${this.pds}/xrpc/com.atproto.server.getServiceAuth?${qs}`, {
       headers: { authorization: `Bearer ${this.accessJwt}` },
     });
     const { token } = await readJson(res, 'com.atproto.server.getServiceAuth');
     const call = await fetch(`${host}/xrpc/${nsid}`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
-      body: JSON.stringify(body),
+      headers: { 'content-type': contentType, authorization: `Bearer ${token}` },
+      body: contentType === 'application/json' ? JSON.stringify(body) : body,
     });
     return readJson(call, nsid);
   }

@@ -1,12 +1,28 @@
 import { resolveHandle, resolvePds, Session } from '../atproto.js';
-import { deleteLogin, loadLogin, promptHidden, promptLine, readLoginInfo, saveLogin } from '../credentials.js';
+import {
+  deleteLogin, loadLogin, loadSession, promptHidden, promptLine, readLoginInfo, saveLogin, saveSession,
+} from '../credentials.js';
 import { TglError } from '../errors.js';
 import { t } from '../i18n.js';
 
-// Opens a session with the saved login. Used by every command that writes.
+let session;
+
+// Picks up the session of an earlier command if there is one; only logs in with the app
+// password otherwise, because servers cap logins per account.
 export async function openSession() {
-  const login = loadLogin();
-  return Session.login(login.pds, login.did, login.password);
+  if (session) return session;
+  const info = readLoginInfo();
+  const saved = info && loadSession(info.did);
+  const resumed = saved && await Session.resume(info.pds, saved);
+  if (resumed) {
+    session = resumed;
+  } else {
+    const login = loadLogin();
+    session = await Session.login(login.pds, login.did, login.password);
+  }
+  // A renewal replaces the tokens, so what is saved has to follow.
+  if (session.refreshJwt !== saved?.refreshJwt) saveSession(session.did, session.tokens);
+  return session;
 }
 
 const STORE_NAMES = {
@@ -38,6 +54,7 @@ export default {
         if (!password) throw new TglError(t('No password was entered.', 'No se escribió ninguna contraseña.'));
         const session = await Session.login(pds, did, password);
         saveLogin({ handle: session.handle, did, pds, password });
+        saveSession(did, session.tokens);
         console.log(t(`Login checked and saved for ${session.handle}.`, `Sesión comprobada y guardada para ${session.handle}.`));
       },
     },
@@ -60,6 +77,9 @@ export default {
         'Uso: tgl auth logout\n\nPara invalidarla del todo, bórrala también en los ajustes de tu cuenta.',
       ),
       async run() {
+        const info = readLoginInfo();
+        const saved = info && loadSession(info.did);
+        if (saved) await Session.end(info.pds, saved);
         deleteLogin();
         console.log(t('Credentials deleted from this computer.', 'Credenciales borradas de este ordenador.'));
       },

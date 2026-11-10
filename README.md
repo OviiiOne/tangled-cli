@@ -6,6 +6,9 @@
 
 A command-line tool for [Tangled](https://tangled.org), in the style of GitHub's `gh`.
 
+> **Works with the new Tangled.** Since version 0.5.0, `tgl` supports the data format Tangled
+> introduced in October 2026. Older versions don't: update with `npm install -g tangled-cli`.
+
 ## What it's for
 
 Manage Tangled without leaving the terminal: create repos, and open, label, merge and
@@ -24,7 +27,7 @@ Merge PRs on Tangled with `tgl pr merge`, or, for repos mirrored on GitHub and T
 open the PR on both, merge locally, push once, and mark the Tangled PR as merged with
 `tgl pr close --merged`.
 
-No third-party dependencies: only Node.js 20+ and git. MIT licensed.
+No third-party dependencies: only Node.js 22+ and git. MIT licensed.
 
 ## Install
 
@@ -32,7 +35,7 @@ No third-party dependencies: only Node.js 20+ and git. MIT licensed.
 npm install -g tangled-cli
 ```
 
-This installs the `tgl` command. Check it with `tgl --version`.
+This installs the `tgl` command ([on npm](https://www.npmjs.com/package/tangled-cli)). Check it with `tgl --version`.
 
 From source, to try unreleased changes:
 
@@ -50,7 +53,8 @@ npm link
 2. Run `tgl auth login` and paste it when asked.
 
 It is kept in your system's secret store (Windows DPAPI, macOS Keychain, Linux secret
-service), never in a repository. `tgl auth logout` deletes it.
+service), never in a repository, along with a temporary session so each command doesn't
+have to log in again. `tgl auth logout` deletes both.
 
 ## Use
 
