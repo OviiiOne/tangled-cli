@@ -31,11 +31,9 @@ Necesitas Node.js 20 o superior y git. No hay nada que instalar: `tgl` no tiene 
   `release`) es un archivo en `src/commands/`. Un tema nuevo es un archivo nuevo y una
   línea en `src/cli.js`, sin tocar los demás.
 - `src/tangled.js` tiene los formatos de registro de Tangled. No están documentados
-  oficialmente: antes de cambiar uno, lee los lexicons y `appview/` en
-  [tangled.org/core](https://tangled.org/tangled.org/core), y mira qué hace
-  `appview/ingester.go` con él (algunos campos se ignoran).
-- Los registros de otras personas se encuentran con índices públicos (`src/backlinks.js`,
-  `src/atproto.js`); los tuyos se leen siempre de tu propio servidor.
+  oficialmente: antes de cambiar uno, lee `lexicons/org/tangled/` y `web/src/lib/api/` en
+  [tangled.org/core](https://tangled.org/tangled.org/core).
+- La lectura va por la API pública de Tangled (`src/api.js`, `src/repoData.js`).
 
 ## Normas para los cambios
 

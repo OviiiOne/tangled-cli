@@ -2,13 +2,11 @@ import { whoAmI } from '../credentials.js';
 import { TglError } from '../errors.js';
 import { t } from '../i18n.js';
 import {
-  buildLabelDefinitionRecord, LABEL_DEFINITION, LABEL_KINDS, labelKind, repoLabelDefs, repoRecord,
+  buildLabelDefinitionRecord, LABEL_DEFINITION, LABEL_KINDS, repoLabelDefs, repoLabels, repoRecord,
 } from '../labels.js';
-import { authorOf, NSID, resolveRepo, TANGLED_DID } from '../tangled.js';
+import { authorOf, resolveRepo } from '../tangled.js';
 import { openSession } from './auth.js';
-import { jsonOption, printJson, repoOption } from './shared.js';
-
-const SCOPE_WORDS = { [NSID.issue]: 'issues', [NSID.pull]: 'PRs' };
+import { jsonOption, printJson, repoOption, writesPaused } from './shared.js';
 
 // A repo's labels are listed in its repo record, which lives in the owner's account:
 // only the owner can add or remove them (appview/repo/repo.go, AddLabelDef).
@@ -31,24 +29,16 @@ export default {
       options: { ...repoOption, ...jsonOption },
       async run(opts) {
         const { repoDid, label } = await resolveRepo(opts.repo);
-        const defs = await repoLabelDefs(whoAmI(), repoDid);
+        const defs = await repoLabels(repoDid);
         if (opts.json) {
-          printJson(defs.map((d) => ({ ...d, id: d.uri.split('/').pop() })));
+          printJson(defs);
           return;
         }
         if (!defs.length) {
           console.log(t(`${label} uses no labels.`, `${label} no usa etiquetas.`));
           return;
         }
-        for (const d of defs) {
-          const scope = (d.scope ?? []).map((s) => SCOPE_WORDS[s] ?? s).join(' + ') || t('all', 'todo');
-          const origin = authorOf(d.uri) === TANGLED_DID ? ' (Tangled)' : '';
-          console.log(`${d.name.padEnd(20)} ${labelKind(d).padEnd(18)} ${scope.padEnd(14)} ${d.color ?? ''}${origin}`);
-        }
-        console.log(t(
-          '\nPut them on an issue or PR with: tgl issue label <issue> --add <name>',
-          '\nPonlas en una issue o PR con: tgl issue label <issue> --add <nombre>',
-        ));
+        for (const d of defs) console.log(`${d.name.padEnd(24)} ${d.color ?? ''}`);
       },
     },
     create: {
@@ -91,6 +81,7 @@ export default {
         color: { type: 'string', short: 'c' },
       },
       async run(opts, [name]) {
+        writesPaused();
         const values = (opts.values ?? '').split(',').map((v) => v.trim()).filter(Boolean);
         const definition = buildLabelDefinitionRecord({ name, kind: opts.kind, values, multiple: opts.multiple, scope: opts.for, color: opts.color });
         const { repoDid, label } = await resolveRepo(opts.repo);
@@ -129,6 +120,7 @@ export default {
       ]).join('\n'),
       options: repoOption,
       async run(opts, [name]) {
+        writesPaused();
         if (!name) throw new TglError(t('Say which label: tgl label delete <name>', 'Indica la etiqueta: tgl label delete <nombre>'));
         const { repoDid, label } = await resolveRepo(opts.repo);
         const defs = await repoLabelDefs(whoAmI(), repoDid);

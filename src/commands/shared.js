@@ -1,15 +1,21 @@
 // Options and output helpers shared by several topics.
 import { spawn } from 'node:child_process';
 import { readFileSync } from 'node:fs';
+import { apiList } from '../api.js';
 import { handleOf } from '../atproto.js';
-import { recordsLinkingTo } from '../backlinks.js';
-import { whoAmI } from '../credentials.js';
 import { TglError } from '../errors.js';
 import { t } from '../i18n.js';
-import { buildLabelOpRecord, formatLabels, LABEL_OP, labelsOf, parseLabelArg, repoLabelDefs } from '../labels.js';
-import { repoPeople } from '../repoData.js';
-import { authorOf, commentText, NSID, parseNumber, repoWebUrl, resolveRepo } from '../tangled.js';
-import { openSession } from './auth.js';
+import { formatLabels, repoLabels } from '../labels.js';
+import { commentFromView, parseNumber, repoWebUrl, resolveRepo } from '../tangled.js';
+
+// Stops a command that still writes Tangled's old record format: the write would succeed
+// but the website no longer reads those records, so the user's work would vanish.
+export function writesPaused() {
+  throw new TglError(t(
+    "tgl can't do this yet: Tangled changed how it stores this data, and the website would not show the change. Nothing was changed. Please do it on tangled.org for now; commands that only read (list, view) do work.",
+    'tgl aún no puede hacer esto: Tangled ha cambiado cómo guarda estos datos y la web no mostraría el cambio. No se ha cambiado nada. De momento hazlo en tangled.org; los comandos que solo leen (list, view) sí funcionan.',
+  ));
+}
 
 export const repoOption = { repo: { type: 'string', short: 'R' } };
 export const jsonOption = { json: { type: 'boolean', default: false } };
@@ -54,15 +60,9 @@ export function day(isoDate) {
   return (isoDate ?? '').slice(0, 10);
 }
 
-// Comments in the current format plus those in the deprecated per-kind collection.
-export async function loadComments(account, subjectUri, legacy) {
-  const [current, old] = await Promise.all([
-    recordsLinkingTo({ account, collection: NSID.comment, links: [{ target: subjectUri, path: '.subject.uri' }] }),
-    recordsLinkingTo({ account, collection: legacy.collection, links: [{ target: subjectUri, path: legacy.path }] }),
-  ]);
-  const comments = [...current, ...old]
-    .map((r) => ({ uri: r.uri, author: authorOf(r.uri), body: commentText(r.value), createdAt: r.value.createdAt ?? '' }))
-    .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+// An issue's or PR's comments, oldest first.
+export async function loadComments(subjectUri) {
+  const comments = (await apiList('org.tangled.feed.listComments', { subject: subjectUri, order: 'asc' })).map(commentFromView);
   await Promise.all(comments.map(async (c) => { c.authorHandle = await handleOf(c.author); }));
   return comments;
 }
@@ -93,11 +93,12 @@ export async function editTitleBody(session, item, { title, body }, what) {
   return value;
 }
 
-// Labels of an issue or PR, for "view": [] when the repo uses none.
+// Labels of an issue or PR, for "view". People assigned to it show as an "assignee" label.
 export async function itemLabels(repoDid, item) {
-  const defs = await repoLabelDefs(whoAmI(), repoDid);
-  if (!defs.length) return [];
-  return labelsOf(whoAmI(), item.uri, defs, (await repoPeople(whoAmI(), repoDid)).editors);
+  const names = new Map(item.labels.length ? (await repoLabels(repoDid)).map((d) => [d.key, d.name]) : []);
+  const labels = item.labels.map((key) => ({ name: names.get(key) ?? key, values: [] }));
+  if (item.assignees.length) labels.push({ name: 'assignee', values: await Promise.all(item.assignees.map(handleOf)) });
+  return labels;
 }
 
 // "tgl issue label" and "tgl pr label". `find(opts, ref)` returns the issue or PR.
@@ -130,47 +131,13 @@ export function labelCommand(kind, find) {
       remove: { type: 'string', short: 'r', multiple: true, default: [] },
     },
     async run(opts, [ref]) {
+      if (opts.add.length || opts.remove.length) writesPaused();
       const item = await find(opts, ref);
       const { repoDid } = await resolveRepo(opts.repo);
-      const defs = await repoLabelDefs(whoAmI(), repoDid);
-      if (!defs.length) throw new TglError(t('This repo uses no labels.', 'Este repo no usa etiquetas.'));
-      const { editors } = await repoPeople(whoAmI(), repoDid);
-      const current = await labelsOf(whoAmI(), item.uri, defs, editors);
-      const collection = kind === 'pull' ? NSID.pull : NSID.issue;
-
-      if (!opts.add.length && !opts.remove.length) {
-        console.log(item.title);
-        console.log(`${t('Labels', 'Etiquetas')}: ${formatLabels(current) || t('(none)', '(ninguna)')}`);
-        const usable = defs.filter((d) => !d.scope?.length || d.scope.includes(collection));
-        console.log(`${t("Repo's labels", 'Etiquetas del repo')}: ${usable.map((d) => (d.valueType?.type === 'null' ? d.name : `${d.name}=<${d.valueType?.format === 'did' ? t('person', 'persona') : t('value', 'valor')}>`)).join(', ')}`);
-        return;
-      }
-
-      const session = await openSession();
-      if (!editors.includes(session.did)) {
-        throw new TglError(t("Only the repo's owner and collaborators can change labels.", 'Solo el dueño del repo y sus colaboradores pueden cambiar etiquetas.'));
-      }
-      const has = new Map(current.map((l) => [l.uri, new Set(l.raw)]));
-      const remove = [];
-      for (const arg of opts.remove) {
-        const { def, value } = await parseLabelArg(arg, defs, collection, { removing: true });
-        const values = value === undefined ? [...(has.get(def.uri) ?? [])] : [value].filter((v) => has.get(def.uri)?.has(v));
-        remove.push(...values.map((v) => ({ key: def.uri, value: v })));
-      }
-      const add = [];
-      for (const arg of opts.add) {
-        const { def, value } = await parseLabelArg(arg, defs, collection);
-        if (!has.get(def.uri)?.has(value)) add.push({ key: def.uri, value });
-      }
-      if (!add.length && !remove.length) {
-        console.log(t(`Nothing to change on "${item.title}".`, `Nada que cambiar en "${item.title}".`));
-        return;
-      }
-      await session.createRecord(LABEL_OP, buildLabelOpRecord({ subjectUri: item.uri, add, remove }));
-      const nameOf = new Map(defs.map((d) => [d.uri, d.name]));
-      const show = async (sign, { key, value }) => `${sign}${nameOf.get(key)}${value === 'null' ? '' : `=${value.startsWith('did:') ? await handleOf(value) : value}`}`;
-      const changes = await Promise.all([...remove.map((o) => show('-', o)), ...add.map((o) => show('+', o))]);
-      console.log(t(`Labels of "${item.title}" updated: ${changes.join(' ')}`, `Etiquetas de "${item.title}" actualizadas: ${changes.join(' ')}`));
+      const defs = await repoLabels(repoDid);
+      console.log(item.title);
+      console.log(`${t('Labels', 'Etiquetas')}: ${formatLabels(await itemLabels(repoDid, item)) || t('(none)', '(ninguna)')}`);
+      console.log(`${t("Repo's labels", 'Etiquetas del repo')}: ${defs.map((d) => d.name).join(', ') || t('(none)', '(ninguna)')}`);
     },
   };
 }

@@ -1,8 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  buildArtifactRecord, buildCommentRecord, buildIssueRecord, commentText, buildIssueStateRecord, buildPullRecord, buildStatusRecord,
-  buildRepoRecord, closingRefs, ISSUE_STATES, latestState, linkClosingRefs, parseNumber, PULL_STATES, repoNameProblem, tagHashFromRecord,
+  buildArtifactRecord, buildCommentRecord, buildIssueRecord, commentFromView, commentText, buildIssueStateRecord, buildPullRecord, buildStatusRecord,
+  buildRepoRecord, closingRefs, ISSUE_STATES, linkClosingRefs, parseNumber, parseTicketRef, PULL_STATES, repoNameProblem, tagHashFromRecord,
+  ticketFromView, ticketUri,
 } from '../src/tangled.js';
 
 const now = new Date('2026-09-26T10:00:00Z');
@@ -35,17 +36,47 @@ test('status record', () => {
   });
 });
 
-test('state is the newest record by an allowed author, open by default', () => {
-  const rec = (did, status, createdAt) => ({ uri: `at://${did}/sh.tangled.repo.pull.status/x`, value: { status, createdAt } });
-  const opts = { field: 'status', known: PULL_STATES, allowed: new Set(['did:author', 'did:owner']) };
-  assert.equal(latestState([], opts), 'open');
-  assert.equal(latestState([
-    rec('did:author', PULL_STATES.closed, '2026-01-02T00:00:00Z'),
-    rec('did:owner', PULL_STATES.merged, '2026-01-03T00:00:00Z'),
-    rec('did:author', PULL_STATES.open, '2026-01-01T00:00:00Z'),
-  ], opts), 'merged');
-  // Tangled ignores state changes from strangers, so must we.
-  assert.equal(latestState([rec('did:stranger', PULL_STATES.closed, '2026-01-09T00:00:00Z')], opts), 'open');
+test('a list item becomes a ticket', () => {
+  const view = {
+    author: 'did:plc:a', cid: 'bafy', state: 'completed', uri: 'at://did:plc:r/org.tangled.track.ticket/20',
+    value: {
+      title: { text: 'T' }, body: { text: 'B' }, createdAt: '2026-09-27T14:31:12Z', targetBranch: 'master',
+      tangledLabels: [{ key: 'area:knot' }], assignees: ['did:plc:b'],
+    },
+  };
+  assert.deepEqual(ticketFromView('pull', view), {
+    uri: view.uri, cid: 'bafy', rkey: '20', author: 'did:plc:a', title: 'T', body: 'B', createdAt: '2026-09-27T14:31:12Z',
+    state: 'merged', labels: ['area:knot'], assignees: ['did:plc:b'], target: { branch: 'master' },
+  });
+});
+
+test('a ticket view has its fields at the top and the author as a profile', () => {
+  const view = { author: { did: 'did:plc:a', handle: 'a.test' }, cid: 'c', state: 'open', uri: 'at://r/org.tangled.track.ticket/2', title: { text: 'T' }, createdAt: 'x' };
+  const issue = ticketFromView('issue', view);
+  assert.equal(issue.author, 'did:plc:a');
+  assert.equal(issue.title, 'T');
+  assert.equal(issue.body, undefined);
+  assert.deepEqual(issue.labels, []);
+  assert.equal('target' in issue, false);
+});
+
+test('a completed issue counts as closed', () => {
+  assert.equal(ticketFromView('issue', { author: 'd', state: 'completed', uri: 'at://r/c/1', value: {} }).state, 'closed');
+});
+
+test('tickets are named by number, address or minted id, not by branch', () => {
+  const repo = 'did:plc:r';
+  assert.equal(parseTicketRef('#20', repo), '20');
+  assert.equal(parseTicketRef('20', repo), '20');
+  assert.equal(parseTicketRef(ticketUri(repo, '20'), repo), '20');
+  assert.equal(parseTicketRef('3mwizalubuq2s', repo), '3mwizalubuq2s');
+  assert.equal(parseTicketRef('feat/v0.4.0', repo), undefined);
+  assert.equal(parseTicketRef('at://did:plc:other/org.tangled.track.ticket/20', repo), undefined);
+});
+
+test('a comment view names its author as its editor', () => {
+  const view = { uri: 'at://r/org.tangled.feed.comment/x', editor: 'did:plc:a', body: { text: 'Hi' }, createdAt: 'x' };
+  assert.deepEqual(commentFromView(view), { uri: view.uri, author: 'did:plc:a', body: 'Hi', createdAt: 'x' });
 });
 
 test('issue records', () => {

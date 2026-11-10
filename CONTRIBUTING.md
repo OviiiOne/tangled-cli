@@ -30,11 +30,9 @@ You need Node.js 20+ and git. There is nothing to install: `tgl` has no dependen
   `release`) is one file in `src/commands/`. A new topic is a new file plus one line in
   `src/cli.js`, without touching the others.
 - `src/tangled.js` holds Tangled's record formats. They are not officially documented:
-  before changing one, read the lexicons and `appview/` in
-  [tangled.org/core](https://tangled.org/tangled.org/core), and check what
-  `appview/ingester.go` does with it (some fields are ignored).
-- Other people's records are found through public indexes (`src/backlinks.js`,
-  `src/atproto.js`); your own are always read from your own server.
+  before changing one, read `lexicons/org/tangled/` and `web/src/lib/api/` in
+  [tangled.org/core](https://tangled.org/tangled.org/core).
+- Reading goes through Tangled's public API (`src/api.js`, `src/repoData.js`).
 
 ## Rules for changes
 

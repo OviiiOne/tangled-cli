@@ -5,8 +5,8 @@ Session state lives in `.claude/state.md` (local only, gitignored).
 
 ## Scope
 - Typical workflow: a repo mirrored on GitHub and Tangled, where each finished branch gets
-  a PR on both. Merging happens locally and reaches both forges in one push, so `tgl`
-  creates, lists and closes (or marks as merged) PRs. It doesn't merge.
+  a PR on both. The owner's own flow merges locally and reaches both forges in one push,
+  then marks the PR as merged. `tgl pr merge` exists for everyone else.
 - Topics: `auth`, `repo`, `pr`, `issue`, `label`, `release` (files attached to an annotated tag).
 - Built for the public, not only this project's owner: any repo, default branch, OS or language.
 
@@ -16,15 +16,15 @@ Session state lives in `.claude/state.md` (local only, gitignored).
   not require touching the existing ones.
 - Every user-facing message goes through `t(english, spanish)` (`src/i18n.js`); the
   language follows the system (`TGL_LANG` overrides). Code, comments and commits in English.
-- `src/tangled.js` holds every Tangled record format. They are undocumented and may
-  change: before touching them, re-read the lexicons and `appview/` in
-  https://tangled.org/tangled.org/core.
-- Other accounts' records (PRs, issues, comments, states) are found through the public
-  Constellation backlink index (`src/backlinks.js`) and read through the Slingshot cache
-  with the author's server as fallback (`src/atproto.js`); the user's own records are
-  always read directly. Old record formats point at the repo by a repo-record at-uri or
-  other field names (`src/repoData.js`). Check listing changes against the web counts of a
-  big repo such as `tangled.org/core`.
+- `src/tangled.js` holds every Tangled record format. Before touching them, re-read
+  `lexicons/org/tangled/` and `web/src/lib/api/` in https://tangled.org/tangled.org/core,
+  and https://tangled.org/docs/reference/records/.
+- Reads go through Tangled's public API, bobbin (`src/api.js`, `src/repoData.js`). Issues
+  and PRs are `org.tangled.track.ticket` records on the repo's knot. Check listing changes
+  against the web counts of a big repo such as `tangled.org/core`.
+- Commands that still write the old `sh.tangled.*` format call `writesPaused()`
+  (`src/commands/shared.js`) first. Move each to the new format, then drop the call and
+  the old helpers it used (`repoPeople`, `backlinks.js`, most of `labels.js`).
 - Knot operations (e.g. `repo set-default-branch`) use a service-auth token from the
   user's PDS (`Session.callService`); the knot is found in the repo DID document.
 - Auth = app password in the OS secret store (`src/credentials.js`: DPAPI, Keychain,

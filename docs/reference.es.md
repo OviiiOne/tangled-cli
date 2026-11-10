@@ -2,6 +2,12 @@
 
 [English](reference.md) · [Volver al README](../README.es.md)
 
+> **En pausa por ahora:** `repo create`, `repo set-default-branch`, `release upload`,
+> `label create`, `label delete`, poner o quitar etiquetas, y `create`, `comment`, `edit`,
+> `close` y `reopen` de `pr` e `issue`, además de `pr update`, `pr merge` e `issue stale`.
+> Tangled cambió su formato de datos y aún no escriben el nuevo. Se paran con un aviso y no
+> cambian nada. Todo lo demás funciona.
+
 ## Comandos
 
 | Comando | Qué hace |
@@ -40,9 +46,9 @@
 
 - El repo de Tangled se deduce del remoto git (`git@tangled.org:did:plc:...`), o se indica
   con `-R cuenta/nombre` o `-R did:plc:...`.
-- `<pr>` e `<issue>` son el número que muestra la web (`12` o `#12`) o el id que muestra
-  `list`; una PR también se puede indicar por su rama. `[<pr>]` se puede omitir: entonces es
-  la PR abierta de la rama actual.
+- `<pr>` e `<issue>` son el número que muestran la web y `list` (`12` o `#12`). Las issues y
+  las PRs comparten numeración. Una PR también se puede indicar por su rama. `[<pr>]` se
+  puede omitir: entonces es la PR abierta de la rama actual.
 - Todos los comandos tienen `--help`. `pr create`, `pr update`, `pr merge` y
   `release upload` tienen `--dry-run`, que lo comprueba todo sin escribir nada.
 - Las listas muestran las 30 más recientes; `--limit 0` las muestra todas.
@@ -101,14 +107,14 @@
   `--remote tangled` además lo añade como remoto git. Para las pipelines, elige un servidor
   de CI con `--spindle spindle.tangled.sh` o luego en los ajustes del repo en la web.
 - `--web` abre la página en el navegador. Las páginas de PRs e issues van por número, así
-  que con un id o una rama se abre la lista.
+  que con una rama se abre la lista.
 - En lugar de `-b` se puede usar `-F archivo.md` para leer el texto de un archivo.
 - `release upload`: la etiqueta tiene que ser anotada (`git tag -a`), estar ya subida a
   Tangled y ser la misma que en tu copia. Tangled admite hasta 50 MB por archivo. Una
   etiqueta no puede tener dos archivos con el mismo nombre.
-- Los ids son la última parte de la dirección de cada registro, como los muestra `list`.
-  Los números los pone la web de Tangled y no están en ningún registro: `tgl` los lee de la
-  página web de cada una, y `list` muestra ids, no números.
+- Los comandos que solo leen no necesitan iniciar sesión.
+- Las PRs anteriores a la migración de Tangled no guardan sus cambios, así que `pr view` no
+  lista archivos en ellas.
 - Los mensajes salen en inglés, o en español si el sistema está en español. Para forzar
   uno: `TGL_LANG=en` o `TGL_LANG=es`.
 - En los Linux sin servicio de secretos, la contraseña de aplicación se guarda en un archivo
@@ -116,29 +122,11 @@
 
 ## Cómo funciona
 
-En Tangled, como en todo el AT Protocol, los datos de cada persona se guardan en su propia
-cuenta. Una PR o una issue es un registro en la cuenta de quien la escribe, que apunta al repo.
+En Tangled, las issues, PRs, comentarios y etiquetas de un repo se guardan junto al repo, en
+su servidor git (su "knot"). Una issue y una PR son el mismo tipo de registro, un "ticket";
+una PR es un ticket con rama de destino, y cada una de sus revisiones es otro registro.
 
-- Escribir (crear, comentar, cerrar…) guarda registros en tu cuenta con tu contraseña de
-  aplicación. Los ajustes del repo, las fusiones y los repos nuevos (`repo set-default-branch`,
-  `pr merge`, `repo create`) van al servidor git del repo
-  (su "knot") con un pase de un solo uso que emite tu cuenta solo para esa acción.
-- Leer PRs, issues y comentarios de otras personas necesita un índice de "qué registros
-  apuntan a este repo". `tgl` usa dos servicios públicos de la comunidad, de
-  [microcosm](https://www.microcosm.blue), que solo sirven para leer:
-  [Constellation](https://constellation.microcosm.blue) (ese índice) y
-  [Slingshot](https://slingshot.microcosm.blue) (una copia rápida de los registros, que se
-  actualiza al momento). Ninguno ve nunca tus credenciales. Si Slingshot falla, los
-  registros se leen del servidor de su autor. Si Constellation no responde, `tgl` avisa y
-  sigue mostrando lo que está en tu cuenta. Tus propios registros se leen siempre
-  directamente de tu cuenta.
-- Un cambio de estado (cerrar, reabrir, fusionar) solo cuenta si Tangled lo aceptaría: del
-  autor, del dueño del repo, de un colaborador o de la propia Tangled.
-
-Los formatos no tienen documentación oficial y pueden cambiar. Siguen los
-[lexicons de Tangled](https://tangled.org/tangled.org/core/tree/master/lexicons),
-incluidos los formatos antiguos que aún hay en repos veteranos.
-
-**Limitación conocida:** en repos grandes y antiguos, algunas PRs viejas (sobre todo las
-"apiladas") pueden salir con un estado distinto del de la web, que no se puede reconstruir
-solo con los registros públicos. Las issues y las PRs en el formato actual coinciden con la web.
+`tgl` lee todo esto con la [API pública de Tangled](https://tangled.org/docs/api/bobbin/),
+que no necesita iniciar sesión. Los registros siguen los
+[lexicons de Tangled](https://tangled.org/tangled.org/core/tree/master/lexicons/org/tangled)
+y su [referencia de registros](https://tangled.org/docs/reference/records/).

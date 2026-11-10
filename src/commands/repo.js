@@ -1,14 +1,13 @@
+import { apiFind } from '../api.js';
 import { handleOf } from '../atproto.js';
-import { recordsLinkingTo } from '../backlinks.js';
-import { whoAmI } from '../credentials.js';
 import { TglError } from '../errors.js';
 import { git, remoteDefaultBranch } from '../git.js';
 import { t } from '../i18n.js';
 import {
-  authorOf, buildRepoRecord, DEFAULT_KNOT, knotOf, NSID, repoGitUrl, repoNameProblem, repoWebUrl, resolveRepo,
+  buildRepoRecord, DEFAULT_KNOT, knotOf, NSID, repoGitUrl, repoNameProblem, repoWebUrl, resolveRepo,
 } from '../tangled.js';
 import { openSession } from './auth.js';
-import { jsonOption, openInBrowser, printJson, repoOption, webOption } from './shared.js';
+import { jsonOption, openInBrowser, printJson, repoOption, webOption, writesPaused } from './shared.js';
 
 function remoteBranches(url) {
   return [...git(['ls-remote', '--heads', url]).matchAll(/\trefs\/heads\/(\S+)$/gm)].map((m) => m[1]);
@@ -45,15 +44,13 @@ export default {
           openInBrowser(repoWebUrl(repoDid));
           return;
         }
-        const records = await recordsLinkingTo({ account: whoAmI(), collection: NSID.repo, links: [{ target: repoDid, path: '.repoDid' }] });
-        // A rename leaves an older record behind; the newest one has the current name.
-        const record = records.sort((a, b) => (b.value.createdAt ?? '').localeCompare(a.value.createdAt ?? ''))[0];
+        const manifest = (await apiFind('org.tangled.repo.getRepoByRepoDid', { repoDid }))?.value;
         const url = repoGitUrl(repoDid);
         const info = {
           did: repoDid,
-          name: record?.value.name ?? record?.uri.split('/').pop(),
-          owner: record ? await handleOf(authorOf(record.uri)) : undefined,
-          description: record?.value.description,
+          name: manifest?.declaration?.name,
+          owner: manifest?.declaration ? await handleOf(manifest.declaration.owner) : undefined,
+          description: manifest?.description,
           defaultBranch: remoteDefaultBranch(url),
           branches: remoteBranches(url),
           web: repoWebUrl(repoDid),
@@ -107,6 +104,7 @@ export default {
         remote: { type: 'string' },
       },
       async run(opts, [rawName]) {
+        writesPaused();
         const name = rawName?.replace(/\.git$/, '');
         const problem = repoNameProblem(name);
         if (problem) throw new TglError(problem);
@@ -154,6 +152,7 @@ export default {
       ),
       options: repoOption,
       async run(opts, [branch]) {
+        writesPaused();
         if (!branch) throw new TglError(t('Say which branch: tgl repo set-default-branch main', 'Indica la rama: tgl repo set-default-branch master'));
         const { repoDid, label } = await resolveRepo(opts.repo);
         const url = repoGitUrl(repoDid);

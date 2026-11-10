@@ -2,6 +2,12 @@
 
 [Español](reference.es.md) · [Back to the README](../README.md)
 
+> **Paused for now:** `repo create`, `repo set-default-branch`, `release upload`,
+> `label create`, `label delete`, adding or removing labels, and `pr` and `issue` `create`,
+> `comment`, `edit`, `close` and `reopen`, plus `pr update`, `pr merge` and `issue stale`.
+> Tangled changed its data format and they don't write the new one yet. They stop with a
+> message and change nothing. Everything else works.
+
 ## Commands
 
 | Command | What it does |
@@ -40,9 +46,9 @@
 
 - The Tangled repo is taken from the git remote (`git@tangled.org:did:plc:...`), or given
   with `-R owner/name` or `-R did:plc:...`.
-- `<pr>` and `<issue>` are the number the website shows (`12` or `#12`) or the id shown by
-  `list`; a PR can also be named by its branch. `[<pr>]` can be left out: then it is the
-  open PR of the current branch.
+- `<pr>` and `<issue>` are the number the website and `list` show (`12` or `#12`). Issues
+  and PRs share their numbers. A PR can also be named by its branch. `[<pr>]` can be left
+  out: then it is the open PR of the current branch.
 - Every command has `--help`. `pr create`, `pr update`, `pr merge` and `release upload`
   have `--dry-run`, which checks everything without writing anything.
 - Lists show the 30 newest by default; `--limit 0` shows all.
@@ -101,15 +107,14 @@
 - `repo create` makes an empty repo (default branch `main`, host `knot1.tangled.sh`);
   `--remote tangled` also adds it as a git remote. For pipelines, pick a CI server with
   `--spindle spindle.tangled.sh` or later in the repo's settings on the website.
-- `--web` opens the page in your browser. PR and issue pages go by number, so with an id or
-  a branch the list opens instead.
+- `--web` opens the page in your browser. PR and issue pages go by number, so with a
+  branch the list opens instead.
 - `-b` can be replaced by `-F file.md` to read the text from a file.
 - `release upload`: the tag must be annotated (`git tag -a`), already pushed to Tangled,
   and the same tag as in your copy. Tangled accepts up to 50 MB per file. A tag can't get
   two files with the same name.
-- Ids are the last part of each record's address, as shown by `list`. Numbers are
-  assigned by Tangled's website and are in no record: `tgl` reads them from the item's web
-  page, and `list` shows ids, not numbers.
+- Commands that only read don't need you to log in.
+- PRs from before Tangled's migration keep no changes, so `pr view` lists no files for them.
 - Messages are in English, or in Spanish on Spanish systems. Force one with
   `TGL_LANG=en` or `TGL_LANG=es`.
 - On Linux systems without a secret service, the app password falls back to a file only
@@ -117,33 +122,11 @@
 
 ## How it works
 
-On Tangled, as everywhere on the AT Protocol, each person's data lives in their own
-account. A PR or an issue is a record in its author's account that points at the repo.
+On Tangled, a repo's issues, PRs, comments and labels live with the repo, on its git
+server (its "knot"). An issue and a PR are the same kind of record, a "ticket"; a PR is a
+ticket with a target branch, and each of its revisions is another record.
 
-- Writing (create, comment, close…) saves records to your account with your app password.
-  Repo settings, merges and new repos (`repo set-default-branch`, `pr merge`,
-  `repo create`) go to the repo's git server (its "knot") with a one-use token your
-  account issues for that single action.
-- Reading other people's PRs, issues and comments needs an index of "which records point
-  at this repo". `tgl` uses two public, read-only community services from
-  [microcosm](https://www.microcosm.blue): [Constellation](https://constellation.microcosm.blue)
-  (that index) and [Slingshot](https://slingshot.microcosm.blue) (a fast cache of records,
-  updated live). Neither ever sees your credentials. If Slingshot fails, records are read
-  from their author's server. If Constellation is down, `tgl` warns you and still shows
-  the records in your own account. Your own records are always read straight from your
-  account.
-- A state change (close, reopen, merge) only counts if Tangled would accept it: from the
-  author, the repo owner, a collaborator or Tangled itself.
-
-Records used: `sh.tangled.repo.pull` (with the changes as a gzipped `git format-patch`),
-`.pull.status`, `sh.tangled.repo.issue`, `.issue.state`, `sh.tangled.feed.comment` (comments on both;
-the older `.pull.comment` and `.issue.comment` are still read)
-and `sh.tangled.repo.artifact` (a release file, linked to its tag by the tag's hash).
-
-These formats have no official documentation and may change. They follow
-[Tangled's lexicons](https://tangled.org/tangled.org/core/tree/master/lexicons),
-including older formats still found in long-lived repos.
-
-**Known limitation:** on large, old repos a few old PRs (mostly stacked PRs) may show a
-different state from the website, which can't be rebuilt from public records alone.
-Issues and PRs in the current format match the website.
+`tgl` reads all of this through [Tangled's public API](https://tangled.org/docs/api/bobbin/),
+which needs no login. The records follow
+[Tangled's lexicons](https://tangled.org/tangled.org/core/tree/master/lexicons/org/tangled)
+and [its records reference](https://tangled.org/docs/reference/records/).

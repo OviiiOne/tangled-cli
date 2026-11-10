@@ -1,7 +1,7 @@
-// Labels on issues and PRs (lexicons/label). A repo record lists the label definitions
-// the repo uses; each change is a sh.tangled.label.op record in the account of whoever
-// made it, and the current labels come from replaying those changes in order, as
-// ApplyLabelOps in appview/models/label.go does.
+// Labels on issues and PRs. A repo's labels are org.tangled.label.definition records on
+// its knot, and each ticket lists the keys of its own, so `repoLabels` is all reading needs.
+// The rest of this file is the old sh.tangled.* format, used only by the paused commands.
+import { apiList } from './api.js';
 import { getRecord, handleOf, mapLimit, resolveHandle } from './atproto.js';
 import { recordsLinkingTo } from './backlinks.js';
 import { TglError } from './errors.js';
@@ -10,6 +10,12 @@ import { authorOf, NSID } from './tangled.js';
 
 export const LABEL_OP = 'sh.tangled.label.op';
 export const LABEL_DEFINITION = 'sh.tangled.label.definition';
+
+// The labels a repo offers: [{ key, name, color }], oldest first.
+export async function repoLabels(repoDid) {
+  const items = await apiList('org.tangled.label.listDefinitions', { subject: repoDid, order: 'asc' });
+  return items.map((i) => ({ key: i.uri.split('/').pop(), name: i.value.name, color: i.value.color }));
+}
 
 // The repo's newest repo record (a rename leaves an older one behind).
 export async function repoRecord(account, repoDid) {
@@ -167,14 +173,6 @@ export function buildLabelDefinitionRecord({ name, kind = 'simple', values = [],
   };
   if (hex) record.color = hex;
   return record;
-}
-
-// A label's kind in words, for lists: "simple", "person", "text: high, low"…
-export function labelKind(def) {
-  const vt = def.valueType ?? {};
-  if (vt.enum?.length) return vt.enum.join('/');
-  const kind = Object.entries(LABEL_KINDS).find(([, k]) => k.type === vt.type && k.format === (vt.format ?? 'any'))?.[0] ?? vt.type;
-  return def.multiple ? `${kind}, ${t('several', 'varios')}` : kind;
 }
 
 export function buildLabelOpRecord({ subjectUri, add, remove, now = new Date() }) {

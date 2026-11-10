@@ -11,15 +11,15 @@ import {
 import { openSession } from './auth.js';
 import {
   bodyOptions, checkState, day, editTitleBody, itemLabels, jsonOption, labelCommand, limitOption, loadComments, openInBrowser,
-  parseLimit, parseWebRef, printComments, printJson, readBody, repoOption, webOption,
+  parseLimit, parseWebRef, printComments, printJson, readBody, repoOption, webOption, writesPaused,
 } from './shared.js';
 
 const STATE_WORDS = { open: () => t('open', 'abierta'), closed: () => t('closed', 'cerrada') };
 
 async function findIssue(opts, ref) {
-  if (!ref) throw new TglError(t('Say which issue: its #number or id (tgl issue list).', 'Indica la issue: su #número o su id (tgl issue list).'));
+  if (!ref) throw new TglError(t('Say which issue: its #number (tgl issue list).', 'Indica la issue: su #número (tgl issue list).'));
   const { repoDid } = await resolveRepo(opts.repo);
-  return findById('issue', whoAmI(), repoDid, ref);
+  return findById('issue', repoDid, ref);
 }
 
 // Newest activity on an issue: itself, its comments (current and old format) and its
@@ -34,6 +34,7 @@ async function lastActivity(issue, staleComment) {
 }
 
 async function markStale(opts) {
+  writesPaused();
   const days = Number(opts.days);
   if (!Number.isInteger(days) || days < 0) throw new TglError(t('--days must be a whole number of days.', '--days debe ser un número entero de días.'));
   const { repoDid, label } = await resolveRepo(opts.repo);
@@ -45,7 +46,7 @@ async function markStale(opts) {
   if (def.valueType?.type !== 'null') throw new TglError(t(`"${def.name}" takes a value; use a simple label.`, `"${def.name}" lleva valor; usa una etiqueta simple.`));
   const { editors } = await repoPeople(whoAmI(), repoDid);
   const cutoff = new Date(Date.now() - days * 86_400_000).toISOString();
-  const issues = await loadItems('issue', whoAmI(), repoDid, { state: 'open' });
+  const issues = await loadItems('issue', repoDid, { state: 'open' });
   const checked = await mapLimit(issues, 8, async (issue) => ({
     issue,
     active: (await lastActivity(issue, opts.comment)) > cutoff,
@@ -79,6 +80,7 @@ async function markStale(opts) {
 }
 
 async function setIssueState(opts, ref, state) {
+  writesPaused();
   const body = readBody(opts);
   const issue = await findIssue(opts, ref);
   if (issue.state === state) {
@@ -110,6 +112,7 @@ export default {
       ),
       options: { ...repoOption, title: { type: 'string', short: 't' }, ...bodyOptions },
       async run(opts) {
+        writesPaused();
         if (!opts.title?.trim()) throw new TglError(t('Missing title: --title "..."', 'Falta el título: --title "..."'));
         const body = readBody(opts, { required: true });
         const { repoDid, label } = await resolveRepo(opts.repo);
@@ -137,7 +140,7 @@ export default {
         }
         const limit = parseLimit(opts.limit);
         const { repoDid, label } = await resolveRepo(opts.repo);
-        const issues = await loadItems('issue', whoAmI(), repoDid, { state, limit });
+        const issues = await loadItems('issue', repoDid, { state, limit });
         if (opts.json) {
           printJson(issues.map((i) => ({ id: i.rkey, ...i })));
           return;
@@ -147,7 +150,7 @@ export default {
           return;
         }
         for (const i of issues) {
-          console.log(`${i.rkey}  ${i.state.padEnd(6)}  ${day(i.createdAt).padEnd(10)}  ${i.title}  [${i.authorHandle}]`);
+          console.log(`#${i.rkey}  ${i.state.padEnd(6)}  ${day(i.createdAt).padEnd(10)}  ${i.title}  [${i.authorHandle}]`);
         }
         if (limit && issues.length === limit) {
           console.log(t(`\nShowing the ${limit} newest. More with --limit 0 (all) or --limit N.`, `\nSe muestran las ${limit} más recientes. Más con --limit 0 (todas) o --limit N.`));
@@ -168,7 +171,7 @@ export default {
         }
         const issue = await findIssue(opts, ref);
         const [comments, labels] = await Promise.all([
-          loadComments(whoAmI(), issue.uri, { collection: NSID.legacyIssueComment, path: '.issue' }),
+          loadComments(issue.uri),
           itemLabels((await resolveRepo(opts.repo)).repoDid, issue),
         ]);
         if (opts.json) {
@@ -195,6 +198,7 @@ export default {
       ]).join('\n'),
       options: { ...repoOption, title: { type: 'string', short: 't' }, ...bodyOptions },
       async run(opts, [ref]) {
+        writesPaused();
         const body = readBody(opts);
         const issue = await findIssue(opts, ref);
         const session = await openSession();
@@ -210,6 +214,7 @@ export default {
       ),
       options: { ...repoOption, ...bodyOptions },
       async run(opts, [ref]) {
+        writesPaused();
         const body = readBody(opts, { required: true });
         const issue = await findIssue(opts, ref);
         const session = await openSession();

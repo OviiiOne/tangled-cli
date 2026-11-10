@@ -6,6 +6,10 @@
 
 Herramienta de terminal para [Tangled](https://tangled.org), al estilo de `gh` para GitHub.
 
+> **Adaptándose al nuevo Tangled.** En octubre de 2026 Tangled cambió cómo guarda las issues,
+> las PRs y las etiquetas. `tgl` ya vuelve a leerlas, pero los comandos que cambian algo están
+> en pausa, con un aviso claro, hasta que escriban el formato nuevo. De momento, usa la web para eso.
+
 ## Para qué sirve
 
 Maneja Tangled sin salir de la terminal: crea repos, y abre, etiqueta, fusiona y cierra pull
@@ -32,7 +36,7 @@ Sin dependencias de terceros: solo Node.js 20 o superior y git. Licencia MIT.
 npm install -g tangled-cli
 ```
 
-Esto instala el comando `tgl`. Compruébalo con `tgl --version`.
+Esto instala el comando `tgl` ([en npm](https://www.npmjs.com/package/tangled-cli)). Compruébalo con `tgl --version`.
 
 Desde el código, para probar cambios aún no publicados:
 

@@ -6,16 +6,20 @@ import {
 } from '../git.js';
 import { t, textLanguage } from '../i18n.js';
 import { formatLabels } from '../labels.js';
-import { expandNumber, findById, isIdOf, loadItems, notFound, repoPeople } from '../repoData.js';
+import { mapLimit } from '../atproto.js';
+import { findById, loadItems, notFound, repoPeople, withRounds } from '../repoData.js';
 import {
   buildCommentRecord, buildIssueStateRecord, buildPullRecord, buildStatusRecord, closingRefs, isFork, knotOf, linkClosingRefs, NSID,
-  numberForUri, pullPatch, repoGitUrl, repoWebUrl, resolveRepo,
+  parseTicketRef, pullPatch, repoGitUrl, repoWebUrl, resolveRepo,
 } from '../tangled.js';
 import { openSession } from './auth.js';
 import {
   bodyOptions, checkState, day, editTitleBody, itemLabels, jsonOption, labelCommand, limitOption, loadComments, openInBrowser,
-  parseLimit, parseWebRef, printComments, printJson, readBody, repoOption, webOption,
+  parseLimit, parseWebRef, printComments, printJson, readBody, repoOption, webOption, writesPaused,
 } from './shared.js';
+
+// Looking up each PR's branch is one request per PR: fine for a page, not for thousands.
+const MAX_LIST_WITH_BRANCHES = 100;
 
 const NO_REF_EN = 'Without a PR, the open PR of the current branch.';
 const NO_REF_ES = 'Sin indicar PR, la PR abierta de la rama actual.';
@@ -26,25 +30,22 @@ const STATE_WORDS = {
   merged: () => t('merged', 'fusionada'),
 };
 
-// Finds a PR by its #number, id, full at:// address, or the branch of an open PR in the
+// Finds a PR by its #number, full at:// address, or the branch of an open PR in the
 // same repo. With no ref, the current branch's open PR.
 async function findPull(opts, ref) {
   if (!ref) {
     try {
       ref = currentBranch();
     } catch {
-      throw new TglError(t('Say which PR: its #number, its id (tgl pr list) or its branch name.', 'Indica la PR: su #número, su id (tgl pr list) o el nombre de su rama.'));
+      throw new TglError(t('Say which PR: its #number (tgl pr list) or its branch name.', 'Indica la PR: su #número (tgl pr list) o el nombre de su rama.'));
     }
   }
   const { repoDid } = await resolveRepo(opts.repo);
-  ref = await expandNumber('pull', repoDid, ref);
-  const isBranch = (value) => value.source?.branch === ref && !isFork(value, repoDid);
-  const found = await loadItems('pull', whoAmI(), repoDid, { match: (uri, value) => isIdOf(ref, uri) || isBranch(value) });
-  const byId = found.find((p) => isIdOf(ref, p.uri));
-  if (byId) return { pull: byId, repoDid };
-  const open = found.filter((p) => p.state === 'open');
+  if (parseTicketRef(ref, repoDid) !== undefined) return { pull: await findById('pull', repoDid, ref), repoDid };
+  const pulls = await mapLimit(await loadItems('pull', repoDid, { state: 'open' }), 16, withRounds);
+  const open = pulls.filter((p) => p.source?.branch === ref && !isFork(p, repoDid));
   if (open.length > 1) {
-    throw new TglError(t(`Several open PRs come from branch "${ref}"; use the id (tgl pr list).`, `Hay varias PRs abiertas de la rama "${ref}"; usa su id (tgl pr list).`));
+    throw new TglError(t(`Several open PRs come from branch "${ref}"; use the #number (tgl pr list).`, `Hay varias PRs abiertas de la rama "${ref}"; usa su #número (tgl pr list).`));
   }
   if (!open.length) throw notFound('pull', ref);
   return { pull: open[0], repoDid };
@@ -55,6 +56,7 @@ function changedFiles(patch) {
 }
 
 async function setPullState(opts, ref, state) {
+  writesPaused();
   const { pull, repoDid } = await findPull(opts, ref);
   if (pull.state === state) {
     console.log(t(`PR "${pull.title}" was already ${STATE_WORDS[state]()}.`, `La PR "${pull.title}" ya estaba ${STATE_WORDS[state]()}.`));
@@ -67,8 +69,7 @@ async function setPullState(opts, ref, state) {
 async function writePullState(opts, session, pull, repoDid, state) {
   const editors = new Set((await repoPeople(whoAmI(), repoDid)).editors);
   const refs = state === 'merged' && !opts['keep-issues'] ? await closingRefsOf(pull, editors) : [];
-  // Read while the PR is still listed under its old state, for the link in the comments.
-  const number = refs.length ? await numberForUri(repoDid, 'pull', { uri: pull.uri, title: pull.title, state: pull.state }) : null;
+  const number = pull.rkey;
   await session.createRecord(NSID.pullStatus, buildStatusRecord({ pullUri: pull.uri, state }));
   console.log(t(`PR "${pull.title}" marked as ${STATE_WORDS[state]()}.`, `PR "${pull.title}" marcada como ${STATE_WORDS[state]()}.`));
   if (refs.length) await closeLinkedIssues(session, pull, repoDid, { refs, editors, number });
@@ -78,7 +79,7 @@ async function writePullState(opts, session, pull, repoDid, state) {
 // author or someone who can change the repo's states (owner, collaborators). Other
 // people's comments don't count, or anyone could close issues through someone's PR.
 async function closingRefsOf(pull, editors) {
-  const comments = await loadComments(whoAmI(), pull.uri, { collection: NSID.legacyPullComment, path: '.pull' });
+  const comments = await loadComments(pull.uri);
   const trusted = comments.filter((c) => c.author === pull.author || editors.has(c.author));
   return closingRefs([pull.title, pull.body ?? '', ...trusted.map((c) => c.body)].join('\n'));
 }
@@ -92,7 +93,7 @@ async function closeLinkedIssues(session, pull, repoDid, { refs, editors, number
     const label = ref.uri ?? `#${ref.number}`;
     try {
       if (ref.repo && (await resolveRepo(ref.repo)).repoDid !== repoDid) continue;
-      const issue = await findById('issue', whoAmI(), repoDid, ref.uri ?? `#${ref.number}`);
+      const issue = await findById('issue', repoDid, ref.uri ?? `#${ref.number}`);
       if (done.has(issue.uri)) continue;
       done.add(issue.uri);
       if (issue.state === 'closed') {
@@ -180,6 +181,7 @@ export default {
         'allow-unpushed': { type: 'boolean', default: false },
       },
       async run(opts) {
+        writesPaused();
         if (!opts.title?.trim()) throw new TglError(t('Missing title: --title "..."', 'Falta el título: --title "..."'));
         const body = readBody(opts);
         const { repoDid, label } = await resolveRepo(opts.repo);
@@ -234,9 +236,10 @@ export default {
         }
         const limit = parseLimit(opts.limit);
         const { repoDid, label } = await resolveRepo(opts.repo);
-        const pulls = await loadItems('pull', whoAmI(), repoDid, { state, limit });
+        const listed = await loadItems('pull', repoDid, { state, limit });
+        const pulls = limit && limit <= MAX_LIST_WITH_BRANCHES ? await mapLimit(listed, 16, withRounds) : listed;
         if (opts.json) {
-          printJson(pulls.map(({ rounds, patch, ...p }) => ({ id: p.rkey, ...p })));
+          printJson(pulls.map(({ rounds, ...p }) => ({ id: p.rkey, ...p })));
           return;
         }
         if (!pulls.length) {
@@ -244,8 +247,8 @@ export default {
           return;
         }
         for (const p of pulls) {
-          const from = isFork(p, repoDid) ? `(fork) ${p.source.branch}` : p.source?.branch ?? t('(patch)', '(parche)');
-          console.log(`${p.rkey}  ${p.state.padEnd(6)}  ${day(p.createdAt).padEnd(10)}  ${`${from} -> ${p.target.branch}`.padEnd(28)}  ${p.title}  [${p.authorHandle}]`);
+          const from = isFork(p, repoDid) ? `(fork) ${p.source.branch}` : p.source?.branch ?? '…';
+          console.log(`#${p.rkey}  ${p.state.padEnd(6)}  ${day(p.createdAt).padEnd(10)}  ${`${from} -> ${p.target.branch}`.padEnd(28)}  ${p.title}  [${p.authorHandle}]`);
         }
         if (limit && pulls.length === limit) {
           console.log(t(`\nShowing the ${limit} newest. More with --limit 0 (all) or --limit N.`, `\nSe muestran las ${limit} más recientes. Más con --limit 0 (todas) o --limit N.`));
@@ -267,13 +270,10 @@ export default {
         const { pull, repoDid } = await findPull(opts, ref);
         const patch = await pullPatch(pull, repoDid);
         const files = changedFiles(patch);
-        const [comments, labels] = await Promise.all([
-          loadComments(whoAmI(), pull.uri, { collection: NSID.legacyPullComment, path: '.pull' }),
-          itemLabels(repoDid, pull),
-        ]);
+        const [comments, labels] = await Promise.all([loadComments(pull.uri), itemLabels(repoDid, pull)]);
         const revisions = Math.max(pull.rounds?.length ?? 0, 1);
         if (opts.json) {
-          const { rounds, patch: _inline, ...rest } = pull;
+          const { rounds, ...rest } = pull;
           printJson({ id: pull.rkey, ...rest, revisions, labels: labels.map(({ raw, ...l }) => l), files, comments, ...(opts.patch ? { patch } : {}) });
           return;
         }
@@ -284,6 +284,7 @@ export default {
         if (pull.body) console.log(`\n${pull.body}`);
         console.log(t(`\nChanged files (${files.length}):`, `\nArchivos cambiados (${files.length}):`));
         for (const f of files) console.log(`  ${f}`);
+        if (!files.length) console.log(t('  (Tangled keeps no changes for this PR: it may come from before its migration.)', '  (Tangled no guarda cambios de esta PR: puede ser anterior a su migración.)'));
         printComments(comments);
         if (opts.patch) console.log(`\n${patch}`);
       },
@@ -354,6 +355,7 @@ export default {
       ),
       options: { ...repoOption, ...bodyOptions },
       async run(opts, [ref]) {
+        writesPaused();
         const body = readBody(opts, { required: true });
         const { pull } = await findPull(opts, ref);
         const session = await openSession();
@@ -377,6 +379,7 @@ export default {
       ]).join('\n'),
       options: { ...repoOption, title: { type: 'string', short: 't' }, ...bodyOptions },
       async run(opts, [ref]) {
+        writesPaused();
         const { pull, repoDid } = await findPull(opts, ref);
         const body = linkClosingRefs(readBody(opts), repoDid);
         const session = await openSession();
@@ -408,6 +411,7 @@ export default {
       ]).join('\n'),
       options: { ...repoOption, 'dry-run': { type: 'boolean', default: false }, 'allow-unpushed': { type: 'boolean', default: false } },
       async run(opts, [ref]) {
+        writesPaused();
         const { pull, repoDid } = await findPull(opts, ref);
         if (pull.state !== 'open') throw new TglError(t(`PR "${pull.title}" is ${STATE_WORDS[pull.state]()}; only open PRs can be updated.`, `La PR "${pull.title}" está ${STATE_WORDS[pull.state]()}; solo se pueden actualizar las abiertas.`));
         if (pull.author !== whoAmI().did) throw new TglError(t('Only its author can update this PR.', 'Solo quien creó la PR puede actualizarla.'));
@@ -516,6 +520,7 @@ export default {
 // ("git am" for a format-patch, so each commit is kept, with new hashes), then the PR
 // is marked as merged.
 async function mergePull(opts, ref) {
+  writesPaused();
   const { pull, repoDid } = await findPull(opts, ref);
   if (pull.state !== 'open') {
     throw new TglError(t(`PR "${pull.title}" is ${STATE_WORDS[pull.state]()}; only open PRs can be merged.`, `La PR "${pull.title}" está ${STATE_WORDS[pull.state]()}; solo se pueden fusionar las abiertas.`));
@@ -562,7 +567,7 @@ async function mergePull(opts, ref) {
 }
 
 function requireRef(ref) {
-  if (!ref) throw new TglError(t('Say which PR: its #number or its id (tgl pr list).', 'Indica la PR: su #número o su id (tgl pr list).'));
+  if (!ref) throw new TglError(t('Say which PR: its #number (tgl pr list).', 'Indica la PR: su #número (tgl pr list).'));
   return ref;
 }
 
